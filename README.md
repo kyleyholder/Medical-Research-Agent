@@ -18,8 +18,9 @@ This project was developed by Kyley Holder using the deep-research framework and
 ### Prerequisites
 
 - Node.js 22.x
-- Firecrawl API key
 - OpenAI API key
+- Google Custom Search API key
+- Google Custom Search Engine ID
 
 ### Installation
 
@@ -31,10 +32,10 @@ This project was developed by Kyley Holder using the deep-research framework and
 
 3. Configure environment variables in `.env.local`:
    ```
-   FIRECRAWL_KEY="your_firecrawl_key"
    OPENAI_KEY="your_openai_key"
+   GOOGLE_API_KEY="your_google_api_key"
+   GOOGLE_SEARCH_ENGINE_ID="your_google_search_engine_id"
    CONTEXT_SIZE="128000"
-   FIRECRAWL_CONCURRENCY="2"
    ```
 
 ### Usage
@@ -105,11 +106,12 @@ curl -X POST http://localhost:3051/api/research-doctor \
 The medical research agent follows a specialized research methodology:
 
 1. **Query Generation**: Creates targeted search queries optimized for medical sources
-2. **Multi-Source Search**: Searches across medical directories, hospital websites, and academic profiles
-3. **Information Extraction**: Uses AI to extract structured medical professional data
-4. **Cross-Validation**: Compares information across multiple sources for accuracy
-5. **Confidence Scoring**: Assigns reliability scores based on source authority and consistency
-6. **Result Aggregation**: Combines findings into a structured JSON response
+2. **Google Custom Search**: Utilizes the Google Custom Search API to perform web searches and retrieve relevant results.
+3. **Custom Web Scraping**: Employs a robust, custom-built web scraper to extract and clean content from web pages, handling various user agents and HTML structures.
+4. **Information Extraction**: Uses AI to extract structured medical professional data from the scraped content
+5. **Cross-Validation**: Compares information across multiple sources for accuracy
+6. **Confidence Scoring**: Assigns reliability scores based on source authority and consistency
+7. **Result Aggregation**: Combines findings into a structured JSON response
 
 ## Source Prioritization
 
@@ -124,10 +126,8 @@ The agent prioritizes sources in the following order:
 
 ### Environment Variables
 
-- `FIRECRAWL_KEY`: Your Firecrawl API key for web search and scraping
 - `OPENAI_KEY`: Your OpenAI API key for AI processing
 - `CONTEXT_SIZE`: Maximum context size for AI processing (default: 128000)
-- `FIRECRAWL_CONCURRENCY`: Number of concurrent search requests (default: 2)
 - `PORT`: API server port (default: 3051)
 
 ### Customization
