@@ -2,6 +2,8 @@
 
 A specialized AI-powered research agent for finding accurate information about medical professionals. Built on the deep-research framework, this agent focuses specifically on extracting structured information about doctors including their name, specialty, location, and workplace.
 
+This project was developed by Kyley Holder using the deep-research framework and Vibe Code tools like Manus.
+
 ## Features
 
 - **Targeted Medical Research**: Specialized search queries for medical professionals
