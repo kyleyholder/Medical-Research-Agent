@@ -1,18 +1,19 @@
 {
-  "name": "open-deep-research",
-  "version": "0.0.1",
-  "main": "index.ts",
+  "name": "medical-research-agent",
+  "version": "1.0.0",
+  "main": "src/medical-cli.ts",
   "scripts": {
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "tsx": "tsx --env-file=.env.local",
-    "start": "tsx --env-file=.env.local src/run.ts",
-    "api": "tsx --env-file=.env.local src/api.ts",
-    "docker": "tsx src/run.ts",
+    "start": "tsx --env-file=.env.local src/medical-cli.ts",
+    "api": "tsx --env-file=.env.local src/medical-api.ts",
+    "docker": "tsx src/medical-cli.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "description": "A specialized medical research agent for finding information about medical professionals",
+  "keywords": ["medical", "research", "doctor", "healthcare", "ai"],
+  "author": "Medical Research Agent",
+  "license": "MIT",
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "^4.4.1",
     "@types/cors": "^2.8.17",

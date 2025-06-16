@@ -1,204 +1,214 @@
-# Open Deep Research
+# Medical Research Agent
 
-An AI-powered research assistant that performs iterative, deep research on any topic by combining search engines, web scraping, and large language models.
-
-The goal of this repo is to provide the simplest implementation of a deep research agent - e.g. an agent that can refine its research direction over time and deep dive into a topic. Goal is to keep the repo size at <500 LoC so it is easy to understand and build on top of.
-
-If you like this project, please consider starring it and giving me a follow on [X/Twitter](https://x.com/dzhng). This project is sponsored by [Aomni](https://aomni.com).
-
-## How It Works
-
-```mermaid
-flowchart TB
-    subgraph Input
-        Q[User Query]
-        B[Breadth Parameter]
-        D[Depth Parameter]
-    end
-
-    DR[Deep Research] -->
-    SQ[SERP Queries] -->
-    PR[Process Results]
-
-    subgraph Results[Results]
-        direction TB
-        NL((Learnings))
-        ND((Directions))
-    end
-
-    PR --> NL
-    PR --> ND
-
-    DP{depth > 0?}
-
-    RD["Next Direction:
-    - Prior Goals
-    - New Questions
-    - Learnings"]
-
-    MR[Markdown Report]
-
-    %% Main Flow
-    Q & B & D --> DR
-
-    %% Results to Decision
-    NL & ND --> DP
-
-    %% Circular Flow
-    DP -->|Yes| RD
-    RD -->|New Context| DR
-
-    %% Final Output
-    DP -->|No| MR
-
-    %% Styling
-    classDef input fill:#7bed9f,stroke:#2ed573,color:black
-    classDef process fill:#70a1ff,stroke:#1e90ff,color:black
-    classDef recursive fill:#ffa502,stroke:#ff7f50,color:black
-    classDef output fill:#ff4757,stroke:#ff6b81,color:black
-    classDef results fill:#a8e6cf,stroke:#3b7a57,color:black
-
-    class Q,B,D input
-    class DR,SQ,PR process
-    class DP,RD recursive
-    class MR output
-    class NL,ND results
-```
+A specialized AI-powered research agent for finding accurate information about medical professionals. Built on the deep-research framework, this agent focuses specifically on extracting structured information about doctors including their name, specialty, location, and workplace.
 
 ## Features
 
-- **Iterative Research**: Performs deep research by iteratively generating search queries, processing results, and diving deeper based on findings
-- **Intelligent Query Generation**: Uses LLMs to generate targeted search queries based on research goals and previous findings
-- **Depth & Breadth Control**: Configurable parameters to control how wide (breadth) and deep (depth) the research goes
-- **Smart Follow-up**: Generates follow-up questions to better understand research needs
-- **Comprehensive Reports**: Produces detailed markdown reports with findings and sources
-- **Concurrent Processing**: Handles multiple searches and result processing in parallel for efficiency
+- **Targeted Medical Research**: Specialized search queries for medical professionals
+- **Structured JSON Output**: Consistent data format with name, specialty, location, and workplace
+- **Multiple Source Validation**: Cross-references information across authoritative medical sources
+- **Confidence Scoring**: Provides reliability scores for extracted information
+- **API and CLI Interfaces**: Both programmatic and interactive access methods
+- **Batch Processing**: Research multiple doctors in a single request
 
-## Requirements
+## Quick Start
 
-- Node.js environment
-- API keys for:
-  - Firecrawl API (for web search and content extraction)
-  - OpenAI API (for o3 mini model)
+### Prerequisites
 
-## Setup
+- Node.js 22.x
+- Firecrawl API key
+- OpenAI API key
 
-### Node.js
+### Installation
 
-1. Clone the repository
+1. Clone or download the medical-research-agent directory
 2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-```bash
-npm install
-```
+3. Configure environment variables in `.env.local`:
+   ```
+   FIRECRAWL_KEY="your_firecrawl_key"
+   OPENAI_KEY="your_openai_key"
+   CONTEXT_SIZE="128000"
+   FIRECRAWL_CONCURRENCY="2"
+   ```
 
-3. Set up environment variables in a `.env.local` file:
+### Usage
 
-```bash
-FIRECRAWL_KEY="your_firecrawl_key"
-# If you want to use your self-hosted Firecrawl, add the following below:
-# FIRECRAWL_BASE_URL="http://localhost:3002"
-
-OPENAI_KEY="your_openai_key"
-```
-
-To use local LLM, comment out `OPENAI_KEY` and instead uncomment `OPENAI_ENDPOINT` and `OPENAI_MODEL`:
-
-- Set `OPENAI_ENDPOINT` to the address of your local server (eg."http://localhost:1234/v1")
-- Set `OPENAI_MODEL` to the name of the model loaded in your local server.
-
-### Docker
-
-1. Clone the repository
-2. Rename `.env.example` to `.env.local` and set your API keys
-
-3. Run `docker build -f Dockerfile`
-
-4. Run the Docker image:
-
-```bash
-docker compose up -d
-```
-
-5. Execute `npm run docker` in the docker service:
-
-```bash
-docker exec -it deep-research npm run docker
-```
-
-## Usage
-
-Run the research assistant:
-
+#### CLI Interface
 ```bash
 npm start
 ```
 
-You'll be prompted to:
+Follow the interactive prompts to enter:
+- Doctor's name
+- Medical specialty
+- Optional location hint
+- Optional institution hint
 
-1. Enter your research query
-2. Specify research breadth (recommended: 3-10, default: 4)
-3. Specify research depth (recommended: 1-5, default: 2)
-4. Answer follow-up questions to refine the research direction
-
-The system will then:
-
-1. Generate and execute search queries
-2. Process and analyze search results
-3. Recursively explore deeper based on findings
-4. Generate a comprehensive markdown report
-
-The final report will be saved as `report.md` or `answer.md` in your working directory, depending on which modes you selected.
-
-### Concurrency
-
-If you have a paid version of Firecrawl or a local version, feel free to increase the `ConcurrencyLimit` by setting the `CONCURRENCY_LIMIT` environment variable so it runs faster.
-
-If you have a free version, you may sometimes run into rate limit errors, you can reduce the limit to 1 (but it will run a lot slower).
-
-### DeepSeek R1
-
-Deep research performs great on R1! We use [Fireworks](http://fireworks.ai) as the main provider for the R1 model. To use R1, simply set a Fireworks API key:
-
+#### API Server
 ```bash
-FIREWORKS_KEY="api_key"
+npm run api
 ```
 
-The system will automatically switch over to use R1 instead of `o3-mini` when the key is detected.
+The API server will start on port 3051 with the following endpoints:
 
-### Custom endpoints and models
+- `POST /api/research-doctor` - Research a single doctor
+- `POST /api/research-doctors-batch` - Research multiple doctors (max 10)
+- `GET /health` - Health check
+- `GET /api/docs` - API documentation
 
-There are 2 other optional env vars that lets you tweak the endpoint (for other OpenAI compatible APIs like OpenRouter or Gemini) as well as the model string.
-
+#### Example API Request
 ```bash
-OPENAI_ENDPOINT="custom_endpoint"
-CUSTOM_MODEL="custom_model"
+curl -X POST http://localhost:3051/api/research-doctor \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Dr. John Smith",
+    "specialty": "Cardiology",
+    "location_hint": "Boston, MA",
+    "institution_hint": "Massachusetts General Hospital"
+  }'
+```
+
+#### Example Response
+```json
+{
+  "success": true,
+  "data": {
+    "name": "Dr. John Smith, MD",
+    "specialty": "Interventional Cardiology",
+    "location": "Boston, Massachusetts, USA",
+    "workplace": "Massachusetts General Hospital",
+    "additional_workplaces": ["Harvard Medical School"],
+    "confidence_score": 0.85,
+    "sources": [
+      "https://www.massgeneral.org/doctors/...",
+      "https://hms.harvard.edu/faculty/..."
+    ],
+    "last_updated": "2025-06-09T13:54:00.000Z"
+  },
+  "query": {
+    "name": "Dr. John Smith",
+    "specialty": "Cardiology",
+    "location_hint": "Boston, MA",
+    "institution_hint": "Massachusetts General Hospital"
+  }
+}
 ```
 
 ## How It Works
 
-1. **Initial Setup**
+The medical research agent follows a specialized research methodology:
 
-   - Takes user query and research parameters (breadth & depth)
-   - Generates follow-up questions to understand research needs better
+1. **Query Generation**: Creates targeted search queries optimized for medical sources
+2. **Multi-Source Search**: Searches across medical directories, hospital websites, and academic profiles
+3. **Information Extraction**: Uses AI to extract structured medical professional data
+4. **Cross-Validation**: Compares information across multiple sources for accuracy
+5. **Confidence Scoring**: Assigns reliability scores based on source authority and consistency
+6. **Result Aggregation**: Combines findings into a structured JSON response
 
-2. **Deep Research Process**
+## Source Prioritization
 
-   - Generates multiple SERP queries based on research goals
-   - Processes search results to extract key learnings
-   - Generates follow-up research directions
+The agent prioritizes sources in the following order:
+1. **Medical Directories**: State medical boards, licensing authorities
+2. **Hospital Websites**: Official staff directories and profiles
+3. **Academic Profiles**: University faculty listings and research profiles
+4. **Professional Societies**: Specialty organization member directories
+5. **News Articles**: Recent announcements and press releases
 
-3. **Recursive Exploration**
+## Configuration
 
-   - If depth > 0, takes new research directions and continues exploration
-   - Each iteration builds on previous learnings
-   - Maintains context of research goals and findings
+### Environment Variables
 
-4. **Report Generation**
-   - Compiles all findings into a comprehensive markdown report
-   - Includes all sources and references
-   - Organizes information in a clear, readable format
+- `FIRECRAWL_KEY`: Your Firecrawl API key for web search and scraping
+- `OPENAI_KEY`: Your OpenAI API key for AI processing
+- `CONTEXT_SIZE`: Maximum context size for AI processing (default: 128000)
+- `FIRECRAWL_CONCURRENCY`: Number of concurrent search requests (default: 2)
+- `PORT`: API server port (default: 3051)
+
+### Customization
+
+The agent can be customized by modifying:
+- `src/medical-prompts.ts`: Search and extraction prompts
+- `src/medical-schemas.ts`: Input/output data schemas
+- `src/medical-research.ts`: Core research logic and aggregation
+
+## API Reference
+
+### POST /api/research-doctor
+
+Research a single medical professional.
+
+**Request Body:**
+```json
+{
+  "name": "string (required)",
+  "specialty": "string (required)",
+  "location_hint": "string (optional)",
+  "institution_hint": "string (optional)"
+}
+```
+
+**Response:**
+```json
+{
+  "success": boolean,
+  "data": {
+    "name": "string",
+    "specialty": "string",
+    "location": "string",
+    "workplace": "string",
+    "additional_workplaces": ["string"] | undefined,
+    "confidence_score": number,
+    "sources": ["string"],
+    "last_updated": "string"
+  },
+  "query": object
+}
+```
+
+### POST /api/research-doctors-batch
+
+Research multiple medical professionals (maximum 10 per request).
+
+**Request Body:**
+```json
+{
+  "doctors": [
+    {
+      "name": "string (required)",
+      "specialty": "string (required)",
+      "location_hint": "string (optional)",
+      "institution_hint": "string (optional)"
+    }
+  ]
+}
+```
+
+## Error Handling
+
+The agent provides detailed error messages for common issues:
+- Missing required fields (name, specialty)
+- Invalid input data format
+- API rate limits or connectivity issues
+- No information found for the specified doctor
+
+Low confidence scores (< 0.5) indicate potential issues with:
+- Name spelling or formatting
+- Specialty specification
+- Need for additional location/institution hints
 
 ## License
 
-MIT License - feel free to use and modify as needed.
+MIT License - see LICENSE file for details.
+
+## Support
+
+For issues or questions:
+1. Check the API documentation at `/api/docs`
+2. Verify your API keys are correctly configured
+3. Ensure the doctor name and specialty are accurate
+4. Consider adding location or institution hints for better results
+
