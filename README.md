@@ -104,14 +104,14 @@ curl -X POST http://localhost:3051/api/research-doctor \
 ## How It Works
 
 The medical research agent follows a specialized research methodology:
-
-1. **Query Generation**: Creates targeted search queries optimized for medical sources
+1. **Query Generation**: Creates targeted search queries optimized for medical sources.
 2. **Google Custom Search**: Utilizes the Google Custom Search API to perform web searches and retrieve relevant results.
 3. **Custom Web Scraping**: Employs a robust, custom-built web scraper to extract and clean content from web pages, handling various user agents and HTML structures.
-4. **Information Extraction**: Uses AI to extract structured medical professional data from the scraped content
-5. **Cross-Validation**: Compares information across multiple sources for accuracy
-6. **Confidence Scoring**: Assigns reliability scores based on source authority and consistency
-7. **Result Aggregation**: Combines findings into a structured JSON response
+4. **Information Extraction**: Uses AI to extract structured medical professional data from the scraped content.
+5. **Cross-Validation**: Compares information across multiple sources for accuracy.
+6. **Confidence Scoring**: Assigns reliability scores based on source authority and consistency.
+7. **Result Aggregation**: Combines findings into a structured JSON response.
+
 
 ## Source Prioritization
 
