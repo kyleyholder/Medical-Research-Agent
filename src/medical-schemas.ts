@@ -15,6 +15,7 @@ export const DoctorInfoSchema = z.object({
   location: z.string().describe("Primary practice location (city, state/province, country)"),
   workplace: z.string().describe("Primary institutional affiliation or practice setting"),
   additional_workplaces: z.array(z.string()).optional().describe("Additional institutional affiliations"),
+  additional_locations: z.array(z.string()).optional().describe("Additional practice locations"),
   confidence_score: z.number().min(0).max(1).describe("Confidence score for the information accuracy"),
   sources: z.array(z.string()).describe("URLs of sources used for verification"),
   last_updated: z.string().describe("Timestamp when information was last verified"),
