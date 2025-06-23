@@ -517,6 +517,16 @@ async function aggregateMedicalInfo(extractions: MedicalExtraction[], doctorQuer
 
   aggregatedInfo.workplace = bestWorkplace;
   aggregatedInfo.location = bestLocation;
+
+  // Post-processing: If primary location/workplace are still not provided,
+  // promote from additional fields if available.
+  if ((aggregatedInfo.location === "Not found" || aggregatedInfo.location === "Not provided" || aggregatedInfo.location === "") && aggregatedInfo.additional_locations.length > 0) {
+    aggregatedInfo.location = aggregatedInfo.additional_locations[0];
+  }
+  if ((aggregatedInfo.workplace === "Not found" || aggregatedInfo.workplace === "Not provided" || aggregatedInfo.workplace === "") && aggregatedInfo.additional_workplaces.length > 0) {
+    aggregatedInfo.workplace = aggregatedInfo.additional_workplaces[0];
+  }
+
   aggregatedInfo.confidence_score = Math.min(100, Math.round(bestScore));
   aggregatedInfo.additional_workplaces = Array.from(allWorkplaces).filter(w => w !== bestWorkplace);
   aggregatedInfo.additional_locations = Array.from(allLocations).filter(l => l !== bestLocation);
