@@ -12,6 +12,13 @@ import {
   MedicalExtractionSchema,
   MedicalSearchQueries,
   MedicalSearchQueriesSchema,
+  InstitutionQuery,
+  InstitutionInfo,
+  InstitutionExtraction,
+  InstitutionExtractionSchema,
+  NPIQuery,
+  NPIInfo,
+  NPIExtraction,
 } from './medical-schemas';
 import {
   medicalExtractionPrompt,
@@ -414,10 +421,11 @@ function extractLocationFromUrl(url: string): string | null {
     { pattern: 'tufts.edu', location: 'Boston, MA' },
     { pattern: 'mdanderson.org', location: 'Houston, TX' },
     { pattern: 'cityofhope.org', location: 'Duarte, CA' },
-    { pattern: 'dana-farber.org', location: 'Boston, MA' },
+    { pattern: 'dana-farber.org', location: 'Dana-Farber Cancer Institute' },
     { pattern: 'cancer.gov', location: 'Bethesda, MD' },
+    { pattern: 'radiationoncologyassociates.com', location: 'Boston, MA' },
     { pattern: 'oklahomaproton.com', location: 'Oklahoma City, OK' },
-    { pattern: 'protonradiationoncology.com', location: 'Oklahoma City, OK' } // Added for Proton Radiation Oncology, PLLC
+    { pattern: 'protonradiationoncology.com', location: 'Oklahoma City, OK' }
   ];
   
   for (const { pattern, location } of locationPatterns) {
@@ -429,170 +437,395 @@ function extractLocationFromUrl(url: string): string | null {
   return null;
 }
 
-// Aggregates and refines extracted medical information
-async function aggregateMedicalInfo(extractions: MedicalExtraction[], doctorQuery: DoctorQuery): Promise<DoctorInfo> {
-  const aggregatedInfo: DoctorInfo = {
-    name: doctorQuery.name,
-    specialty: doctorQuery.specialty,
-    location: doctorQuery.location_hint || 'Not found',
-    workplace: 'Not found',
-    confidence_score: 0,
-    sources: [],
-    last_updated: new Date().toISOString(),
-    additional_workplaces: [],
-    additional_locations: [],
+// Aggregate and rank medical information
+function aggregateDoctorInfo(extractions: MedicalExtraction[]): DoctorInfo {
+  if (extractions.length === 0) {
+    return {
+      name: "Not found",
+      specialty: "Not specified",
+      workplace: "Not found",
+      location: "Not found",
+      confidence_score: 0,
+      extractions: [],
+    };
+  }
+
+  // Sort by confidence score in descending order
+  extractions.sort((a, b) => b.confidence - a.confidence);
+
+  // Use the highest confidence extraction as the primary source of truth
+  const bestExtraction = extractions[0];
+
+  const finalDoctorInfo: DoctorInfo = {
+    name: bestExtraction.doctor_name,
+    specialty: bestExtraction.specialty,
+    workplace: bestExtraction.workplace,
+    location: bestExtraction.location,
+    confidence_score: bestExtraction.confidence,
+    extractions: extractions,
   };
 
-  let bestScore = -1;
-  let bestWorkplace = 'Not found';
-  let bestLocation = doctorQuery.location_hint || 'Not found';
-  const allWorkplaces = new Set<string>();
-  const allLocations = new Set<string>();
-
-  for (const ext of extractions) {
-    let score = 0;
-
-    // Score based on confidence from extraction
-    score += ext.confidence * 100; // Max 100
-
-    // Boost for exact name match
-    if (ext.doctor_name.toLowerCase() === doctorQuery.name.toLowerCase()) {
-      score += 50;
+  // Post-processing: If primary workplace or location is not found, try to find it in other extractions
+  if (finalDoctorInfo.workplace === "Not found" || finalDoctorInfo.workplace === "Not specified") {
+    const otherWorkplace = extractions.find(e => e.workplace !== "Not found" && e.workplace !== "Not specified");
+    if (otherWorkplace) {
+      finalDoctorInfo.workplace = otherWorkplace.workplace;
     }
-
-    // Boost for specialty match
-    if (ext.specialty.toLowerCase().includes(doctorQuery.specialty.toLowerCase())) {
-      score += 30;
-    }
-
-    // Boost for location match
-    if (doctorQuery.location_hint && ext.location.toLowerCase().includes(doctorQuery.location_hint.toLowerCase())) {
-      score += 20;
-    }
-
-    // Boost for institution hint match
-    if (doctorQuery.institution_hint && ext.workplace.toLowerCase().includes(doctorQuery.institution_hint.toLowerCase())) {
-      score += 40;
-    }
-
-    // Custom prioritization for Oklahoma Proton Center
-    if (ext.workplace.toLowerCase().includes('oklahoma proton center')) {
-      score += 100; // Significant boost
-    }
-
-    // Prioritize institutional profiles
-    if (ext.source_type === 'institutional_profile') {
-      score += 25;
-    }
-
-    // Penalize generic workplaces
-    if (['not found', 'not specified', ''].includes(ext.workplace.toLowerCase())) {
-      score -= 10;
-    }
-
-    // Penalize generic locations
-    if (['not found', 'not specified', ''].includes(ext.location.toLowerCase())) {
-      score -= 5;
-    }
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestWorkplace = ext.workplace;
-      bestLocation = ext.location;
-    }
-
-    if (ext.workplace && ext.workplace !== 'Not found' && ext.workplace !== 'Not specified') {
-      allWorkplaces.add(ext.workplace);
-    }
-    if (ext.location && ext.location !== 'Not found' && ext.location !== 'Not specified') {
-      allLocations.add(ext.location);
-    }
-
-    aggregatedInfo.sources.push({
-      url: ext.source_url || ext.url, // Use source_url if available, otherwise url
-      type: ext.source_type,
-      confidence: ext.confidence,
-    });
   }
 
-  aggregatedInfo.workplace = bestWorkplace;
-  aggregatedInfo.location = bestLocation;
-
-  // Post-processing: If primary location/workplace are still not provided,
-  // promote from additional fields if available.
-  if ((aggregatedInfo.location === "Not found" || aggregatedInfo.location === "Not provided" || aggregatedInfo.location === "") && aggregatedInfo.additional_locations.length > 0) {
-    aggregatedInfo.location = aggregatedInfo.additional_locations[0];
+  if (finalDoctorInfo.location === "Not found" || finalDoctorInfo.location === "Not specified") {
+    const otherLocation = extractions.find(e => e.location !== "Not found" && e.location !== "Not specified");
+    if (otherLocation) {
+      finalDoctorInfo.location = otherLocation.location;
+    }
   }
-  if ((aggregatedInfo.workplace === "Not found" || aggregatedInfo.workplace === "Not provided" || aggregatedInfo.workplace === "") && aggregatedInfo.additional_workplaces.length > 0) {
-    aggregatedInfo.workplace = aggregatedInfo.additional_workplaces[0];
-  }
-
-  aggregatedInfo.confidence_score = Math.min(100, Math.round(bestScore));
-  aggregatedInfo.additional_workplaces = Array.from(allWorkplaces).filter(w => w !== bestWorkplace);
-  aggregatedInfo.additional_locations = Array.from(allLocations).filter(l => l !== bestLocation);
-
-  return aggregatedInfo;
-}
-
-export async function researchDoctor(doctorQuery: DoctorQuery): Promise<DoctorInfo> {
-  const limit = pLimit(ConcurrencyLimit);
-  const model = getModel();
-
-  log(`Searching for ${doctorQuery.name} (${doctorQuery.specialty}) in ${doctorQuery.location_hint || "unknown location"}...`);
-
-  // 1. Generate search queries
-  const queries = await generateMedicalSearchQueries(doctorQuery);
-  log(`Generated queries: ${queries.join(", ")}`);
-
-  // 2. Execute searches and scrape content
-  const searchResults: GoogleSearchResult[] = compact(await Promise.all(
-    queries.map(query => limit(() => googleSearch(query)))
-  ).then(results => results.flat()));
-
-  log(`Found ${searchResults.length} search results.`);
-
-  const scrapedContents: { content: string; url: string }[] = compact(await Promise.all(
-    searchResults.map(result => limit(async () => {
-      const content = await enhancedWebScrape(result.link);
-      return content ? { content, url: result.link } : null;
-    }))
-  ));
-
-  log(`Scraped ${scrapedContents.length} web pages.`);
-
-  // 3. Extract medical information from scraped content
-  const extractions: MedicalExtraction[] = compact(await Promise.all(
-    scrapedContents.map(({ content, url }) => limit(() => extractMedicalInfo({
-      content,
-      url,
-      doctorQuery,
-    })))
-  ));
-
-  log(`Extracted ${extractions.length} medical information entries.`);
-
-  // 4. Aggregate and refine information
-  const finalDoctorInfo = await aggregateMedicalInfo(extractions, doctorQuery);
-
-  log("✅ Research Complete!");
-  log("====================");
-  log(`\n📊 Summary:\n👨‍⚕️ Name: ${finalDoctorInfo.name}\n🏥 Specialty: ${finalDoctorInfo.specialty}\n📍 Location: ${finalDoctorInfo.location}\n🏢 Workplace: ${finalDoctorInfo.workplace}`);
-  if (finalDoctorInfo.additional_workplaces && finalDoctorInfo.additional_workplaces.length > 0) {
-    log(`🏢 Additional Workplaces: ${finalDoctorInfo.additional_workplaces.join(", ")}`);
-  }
-  if (finalDoctorInfo.additional_locations && finalDoctorInfo.additional_locations.length > 0) {
-    log(`📍 Additional Locations: ${finalDoctorInfo.additional_locations.join(", ")}`);
-  }
-  log(`📊 Confidence Score: ${finalDoctorInfo.confidence_score}%`);
-  log(`🔗 Sources Found: ${finalDoctorInfo.sources.length}`);
-  log(`\n🔗 Top Sources:`);
-  finalDoctorInfo.sources.forEach((source, index) => {
-    log(`   ${index + 1}. ${source?.url || "undefined"}`);
-  });
-  log(`\n📄 Full JSON Output:\n==================================================`);
-  log(JSON.stringify(finalDoctorInfo, null, 2));
 
   return finalDoctorInfo;
 }
 
+// Main research function for medical professionals
+async function researchDoctor(doctorQuery: DoctorQuery): Promise<DoctorInfo> {
+  log("Generating search queries...");
+  const queries = await generateMedicalSearchQueries(doctorQuery);
+  log("Generated queries:", queries);
+
+  const limit = pLimit(ConcurrencyLimit);
+  const searchPromises = queries.map(query => limit(() => googleSearch(query)));
+  const searchResults = (await Promise.all(searchPromises)).flat();
+
+  log("\nScraping and extracting information...");
+  const extractionPromises = searchResults.map(result =>
+    limit(async () => {
+      const content = await enhancedWebScrape(result.link);
+      if (content) {
+        return extractMedicalInfo({ content, url: result.link, doctorQuery });
+      }
+      return null;
+    })
+  );
+
+  const extractions = compact(await Promise.all(extractionPromises));
+
+  log("\nAggregating and ranking results...");
+  const aggregatedInfo = aggregateDoctorInfo(extractions);
+
+  return aggregatedInfo;
+}
+
+// Generate search queries for institutions
+async function generateInstitutionSearchQueries(institutionQuery: InstitutionQuery): Promise<string[]> {
+  const name = institutionQuery.name;
+  return [
+    `${name} official website`,
+    `${name} location`,
+    `${name} social media`,
+    `${name} about us`,
+    `${name} contact information`,
+  ];
+}
+
+// Extract institution information from content
+async function extractInstitutionInfo({
+  content,
+  url,
+  institutionQuery,
+}: {
+  content: string;
+  url: string;
+  institutionQuery: InstitutionQuery;
+}): Promise<InstitutionExtraction | null> {
+  if (!content || content.length < 50) {
+    log(`Skipping ${url}: content too short (${content.length} chars)`);
+    return null;
+  }
+
+  const prompt = `Extract institution information from the following content. Focus on location, official websites, and social media links.
+
+Target Institution: ${institutionQuery.name}
+Source URL: ${url}
+
+Content to analyze:
+${trimPrompt(content, 8000)}
+
+IMPORTANT INSTRUCTIONS:
+- Extract the full address, including city, state, and zip code if available.
+- Extract all official websites and social media links. Look for:
+  * Official website URLs (mayoclinic.org, etc.)
+  * Facebook URLs (facebook.com/...)
+  * Instagram URLs (instagram.com/...)
+  * Twitter/X URLs (twitter.com/... or x.com/...)
+  * LinkedIn URLs (linkedin.com/...)
+  * YouTube URLs (youtube.com/...)
+- Ensure URLs are complete and valid with proper protocols (https://).
+- Always return 'websites' and 'social_media' as arrays, even if empty.
+- If you cannot find specific information, use these defaults:
+  - location: "Not found"
+  - websites: []
+  - social_media: []
+  - confidence: Base on how much information you found (0.1-1.0)
+
+Always provide all required fields even if the information is limited.`;
+
+  try {
+    const result = await generateObject({
+      model: getModel(),
+      schema: InstitutionExtractionSchema,
+      prompt: trimPrompt(prompt),
+      system: medicalResearchSystemPrompt,
+    });
+
+    const extraction = result.object;
+
+    // Ensure websites and social_media are arrays, even if empty
+    extraction.websites = extraction.websites || [];
+    extraction.social_media = extraction.social_media || [];
+
+    // Normalize and validate URLs
+    extraction.websites = extraction.websites.map(normalizeUrl).filter(isValidUrl);
+    extraction.social_media = extraction.social_media.map(normalizeUrl).filter(isValidUrl);
+
+    log(`✅ Extracted institution info from ${url}: ${extraction.location}`);
+    return extraction;
+  } catch (error) {
+    log("❌ Error extracting institution info from:", url, error);
+    return null;
+  }
+}
+
+// Aggregate and rank institution information
+function aggregateInstitutionInfo(extractions: InstitutionExtraction[], searchResults: any[]): InstitutionInfo {
+  if (extractions.length === 0) {
+    return {
+      name: "Not found",
+      location: "Not found",
+      websites: [],
+      social_media: [],
+      confidence_score: 0,
+      sources: [],
+      last_updated: new Date().toISOString(),
+    };
+  }
+
+  // Sort by confidence score in descending order
+  extractions.sort((a, b) => b.confidence - a.confidence);
+
+  // Use the highest confidence extraction as the primary source of truth
+  const bestExtraction = extractions[0];
+
+  // Collect unique sources from search results
+  const sources = [...new Set(searchResults.map(result => result.link))];
+
+  // Collect all unique websites and social media from all extractions
+  const allWebsites = new Set<string>();
+  const allSocialMedia = new Set<string>();
+
+  extractions.forEach(extraction => {
+    if (extraction.websites) {
+      extraction.websites.forEach(website => allWebsites.add(website));
+    }
+    if (extraction.social_media) {
+      extraction.social_media.forEach(social => allSocialMedia.add(social));
+    }
+  });
+
+  const finalInstitutionInfo: InstitutionInfo = {
+    name: bestExtraction.institution_name,
+    location: bestExtraction.location,
+    websites: Array.from(allWebsites),
+    social_media: Array.from(allSocialMedia),
+    confidence_score: bestExtraction.confidence,
+    sources: sources,
+    last_updated: new Date().toISOString(),
+  };
+
+  return finalInstitutionInfo;
+}
+
+// Main research function for institutions
+async function researchInstitution(institutionQuery: InstitutionQuery): Promise<InstitutionInfo> {
+  log("Generating search queries...");
+  const queries = await generateInstitutionSearchQueries(institutionQuery);
+  log("Generated queries:", queries);
+
+  const limit = pLimit(ConcurrencyLimit);
+  const searchPromises = queries.map(query => limit(() => googleSearch(query)));
+  const searchResults = (await Promise.all(searchPromises)).flat();
+
+  log("\nScraping and extracting information...");
+  const extractionPromises = searchResults.map(result =>
+    limit(async () => {
+      const content = await enhancedWebScrape(result.link);
+      if (content) {
+        return extractInstitutionInfo({ content, url: result.link, institutionQuery });
+      }
+      return null;
+    })
+  );
+
+  const extractions = compact(await Promise.all(extractionPromises));
+
+  log("\nAggregating and ranking results...");
+  const aggregatedInfo = aggregateInstitutionInfo(extractions, searchResults);
+
+  return aggregatedInfo;
+}
+
+// Helper function to validate and normalize URLs
+function normalizeUrl(url: string): string {
+  try {
+    let parsedUrl = new URL(url);
+    // Ensure protocol is present
+    if (!parsedUrl.protocol) {
+      parsedUrl = new URL(`https://${url}`);
+    }
+    // Remove trailing slash if it's just the domain or path
+    if (parsedUrl.pathname === '/' && parsedUrl.search === '' && parsedUrl.hash === '') {
+      return parsedUrl.origin;
+    }
+    return parsedUrl.toString();
+  } catch (error) {
+    return url; // Return original if parsing fails
+  }
+}
+
+function isValidUrl(url: string): boolean {
+  try {
+    const parsedUrl = new URL(url);
+    return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:'
+  } catch (error) {
+    return false;
+  }
+}
+
+
+
+
+
+// NPI lookup function using NPPES API
+async function lookupNPI(npiQuery: NPIQuery): Promise<NPIInfo> {
+  log("Looking up NPI information...");
+  
+  try {
+    // Construct API URL with query parameters
+    const baseUrl = "https://npiregistry.cms.hhs.gov/api/";
+    const params = new URLSearchParams({
+      version: "2.1",
+      enumeration_type: "NPI-1", // Individual providers
+      first_name: npiQuery.first_name,
+      last_name: npiQuery.last_name,
+      limit: "10"
+    });
+
+    // Add optional parameters if provided
+    if (npiQuery.state) {
+      params.append("state", npiQuery.state.toUpperCase());
+    }
+    if (npiQuery.city) {
+      params.append("city", npiQuery.city);
+    }
+    if (npiQuery.specialty) {
+      params.append("taxonomy_description", npiQuery.specialty);
+    }
+
+    const apiUrl = `${baseUrl}?${params.toString()}`;
+    log("NPI API URL:", apiUrl);
+
+    const response = await fetch(apiUrl, {
+      headers: {
+        'User-Agent': 'Medical-Research-Agent/1.0',
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`NPI API request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    log("NPI API response:", JSON.stringify(data, null, 2));
+
+    if (!data.results || data.results.length === 0) {
+      return {
+        npi_number: "Not found",
+        name: `${npiQuery.first_name} ${npiQuery.last_name}`,
+        specialty: "Not found",
+        practice_address: "Not found",
+        enumeration_date: "Not found",
+        last_updated: new Date().toISOString(),
+        status: "Not found",
+        entity_type: "Individual Provider",
+        sources: [apiUrl],
+        confidence_score: 0,
+      };
+    }
+
+    // Process the first (best) result
+    const result = data.results[0];
+    const basicInfo = result.basic || {};
+    const addresses = result.addresses || [];
+    const taxonomies = result.taxonomies || [];
+    
+    // Find practice location (first address) and mailing address
+    const practiceAddress = addresses.find(addr => addr.address_purpose === "LOCATION") || addresses[0];
+    const mailingAddress = addresses.find(addr => addr.address_purpose === "MAILING");
+    
+    // Format practice address
+    const formatAddress = (addr: any) => {
+      if (!addr) return "Not found";
+      const parts = [
+        addr.address_1,
+        addr.address_2,
+        addr.city,
+        addr.state,
+        addr.postal_code
+      ].filter(Boolean);
+      return parts.join(", ");
+    };
+
+    // Get primary taxonomy/specialty
+    const primaryTaxonomy = taxonomies.find(tax => tax.primary === true) || taxonomies[0];
+    const specialty = primaryTaxonomy?.desc || "Not specified";
+
+    // Format name with credentials
+    const credential = basicInfo.credential || "";
+    const fullName = `${basicInfo.first_name || ""} ${basicInfo.last_name || ""}`.trim();
+    const nameWithCredential = credential ? `${fullName}, ${credential}` : fullName;
+
+    const npiInfo: NPIInfo = {
+      npi_number: result.number || "Not found",
+      name: nameWithCredential,
+      credential: credential,
+      specialty: specialty,
+      practice_address: formatAddress(practiceAddress),
+      mailing_address: mailingAddress ? formatAddress(mailingAddress) : undefined,
+      phone: practiceAddress?.telephone_number || undefined,
+      enumeration_date: result.enumeration_date || "Not found",
+      last_updated: result.last_updated_epoch ? new Date(parseInt(result.last_updated_epoch) * 1000).toISOString() : new Date().toISOString(),
+      status: basicInfo.status || "Unknown",
+      entity_type: result.enumeration_type === "NPI-1" ? "Individual Provider" : "Organizational Provider",
+      sources: [apiUrl],
+      confidence_score: 0.9, // High confidence for official NPI registry
+    };
+
+    log("✅ NPI lookup successful:", npiInfo.npi_number);
+    return npiInfo;
+
+  } catch (error) {
+    log("❌ Error during NPI lookup:", error);
+    return {
+      npi_number: "Error",
+      name: `${npiQuery.first_name} ${npiQuery.last_name}`,
+      specialty: "Error during lookup",
+      practice_address: "Error during lookup",
+      enumeration_date: "Error",
+      last_updated: new Date().toISOString(),
+      status: "Error",
+      entity_type: "Individual Provider",
+      sources: [],
+      confidence_score: 0,
+    };
+  }
+}
+
+export { researchDoctor, researchInstitution, lookupNPI };
 
