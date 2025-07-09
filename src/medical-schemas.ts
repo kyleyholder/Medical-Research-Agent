@@ -122,3 +122,69 @@ export type NPIQuery = z.infer<typeof NPIQuerySchema>;
 export type NPIInfo = z.infer<typeof NPIInfoSchema>;
 export type NPIExtraction = z.infer<typeof NPIExtractionSchema>;
 
+
+// Schema for X (Twitter) profile analysis input
+export const XProfileQuerySchema = z.object({
+  username: z.string().min(1, "X username is required").describe("X (Twitter) username with or without @ symbol"),
+});
+
+// Schema for X profile classification result
+export const XProfileClassificationSchema = z.object({
+  classification: z.enum(["doctor", "institution", "neither"]).describe("Classification of the X profile"),
+  confidence: z.number().min(0).max(1).describe("Confidence in the classification"),
+  reasoning: z.string().describe("Explanation for the classification decision"),
+  extracted_name: z.string().optional().describe("Extracted name from the profile"),
+  extracted_bio: z.string().optional().describe("Extracted bio/description from the profile"),
+  medical_indicators: z.array(z.string()).describe("Medical-related keywords or indicators found"),
+});
+
+// Schema for X profile analysis output
+export const XProfileAnalysisSchema = z.object({
+  username: z.string().describe("The analyzed X username"),
+  profile_url: z.string().describe("URL to the X profile"),
+  classification: z.enum(["doctor", "institution", "neither"]).describe("Profile classification"),
+  confidence_score: z.number().min(0).max(1).describe("Overall confidence in the analysis"),
+  reasoning: z.string().describe("Explanation for the classification"),
+  
+  // If classified as doctor, include doctor research results
+  doctor_info: z.object({
+    name: z.string(),
+    specialty: z.string(),
+    location: z.string(),
+    workplace: z.string(),
+    additional_workplaces: z.array(z.string()).optional(),
+    additional_locations: z.array(z.string()).optional(),
+    confidence_score: z.number(),
+    sources: z.array(z.string()),
+    last_updated: z.string(),
+  }).optional().describe("Doctor information if classified as doctor"),
+  
+  // If classified as institution, include institution research results
+  institution_info: z.object({
+    name: z.string(),
+    location: z.string(),
+    websites: z.array(z.string()),
+    social_media: z.array(z.string()),
+    confidence_score: z.number(),
+    sources: z.array(z.string()),
+    last_updated: z.string(),
+  }).optional().describe("Institution information if classified as institution"),
+  
+  // Raw profile data for reference
+  profile_data: z.object({
+    display_name: z.string().optional(),
+    bio: z.string().optional(),
+    location: z.string().optional(),
+    website: z.string().optional(),
+    follower_count: z.number().optional(),
+    following_count: z.number().optional(),
+    verified: z.boolean().optional(),
+  }).optional().describe("Raw profile data extracted from X"),
+  
+  last_updated: z.string().describe("Timestamp when analysis was performed"),
+});
+
+export type XProfileQuery = z.infer<typeof XProfileQuerySchema>;
+export type XProfileClassification = z.infer<typeof XProfileClassificationSchema>;
+export type XProfileAnalysis = z.infer<typeof XProfileAnalysisSchema>;
+

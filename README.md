@@ -6,10 +6,11 @@ This project was developed by Kyley Holder using the deep-research framework and
 
 ## Features
 
-- **Multiple Search Options**: Choose from doctor profiles, institution research, or NPI lookups
+- **Multiple Search Options**: Choose from doctor profiles, institution research, NPI lookups, or X profile analysis
 - **Doctor Profile Research**: Comprehensive information about medical professionals including specialty, location, and workplace
 - **Institution Location Research**: Find detailed information about medical institutions including location, websites, and social media
 - **NPI Number Lookup**: Search the official NPPES registry for National Provider Identifier information
+- **X/Twitter Profile Analysis**: Automatically classify X profiles as doctor, institution, or neither, then extract relevant medical information
 - **Structured JSON Output**: Consistent data format with confidence scoring
 - **Multiple Source Validation**: Cross-references information across authoritative medical sources
 - **Interactive CLI Interface**: User-friendly numbered menu system
@@ -52,7 +53,8 @@ The interactive menu provides the following options:
 1. **Research full doctor profile** - Comprehensive research about a medical professional
 2. **Find medical institution location** - Research medical institutions and their details
 3. **Find NPI number for US doctor** - Look up National Provider Identifier information
-4. **Exit** - Close the application
+4. **Analyze X/Twitter profile** - Classify and research X profiles for Medical Watch verification
+5. **Exit** - Close the application
 
 #### Option 1: Doctor Profile Research
 Follow the prompts to enter:
@@ -75,6 +77,15 @@ Enter the following information:
 - Optional state abbreviation (e.g., 'CA', 'NY')
 - Optional city
 - Optional specialty
+
+#### Option 4: X/Twitter Profile Analysis
+Enter an X username (with or without @) to:
+- **Classify the profile** as doctor, institution, or neither
+- **Extract medical information** if classified as medical-related
+- **Perform additional research** based on classification
+- **Verify Medical Watch accounts** for relevance
+
+This feature is particularly useful for Medical Watch verification workflows.
 
 #### API Server
 ```bash
@@ -169,6 +180,35 @@ curl -X POST http://localhost:3051/api/research-doctor \
 }
 ```
 
+#### Example Response - X Profile Analysis
+```json
+{
+  "username": "drsanjaygupta",
+  "profile_url": "https://x.com/drsanjaygupta",
+  "classification": "doctor",
+  "confidence_score": 0.95,
+  "reasoning": "Profile contains clear medical credentials (Dr. title), specific medical specialty (Neurosurgery), academic position (Associate Professor), and hospital affiliation (Emory University Hospital).",
+  "doctor_info": {
+    "name": "Dr. Sanjay Gupta, MD",
+    "specialty": "Neurosurgery",
+    "location": "Atlanta, Georgia, USA",
+    "workplace": "Emory University Hospital",
+    "additional_workplaces": ["CNN Medical Correspondent"],
+    "confidence_score": 0.88,
+    "sources": [
+      "https://www.emoryhealthcare.org/doctors/...",
+      "https://www.cnn.com/profiles/sanjay-gupta"
+    ],
+    "last_updated": "2025-07-09T18:00:00.000Z"
+  },
+  "profile_data": {
+    "display_name": "Dr. Sanjay Gupta",
+    "bio": "Associate Professor of Neurosurgery, Emory University Hospital; CNN Chief Medical Correspondent"
+  },
+  "last_updated": "2025-07-09T18:00:00.000Z"
+}
+```
+
 ## How It Works
 
 The medical research agent follows specialized research methodologies for each search type:
@@ -193,6 +233,14 @@ The medical research agent follows specialized research methodologies for each s
 2. **Real-Time Data**: Accesses up-to-date NPI information from CMS (Centers for Medicare & Medicaid Services)
 3. **Comprehensive Provider Data**: Retrieves practice addresses, specialties, credentials, and status
 4. **Official Source Verification**: Uses only authoritative government data for maximum accuracy
+
+### X Profile Analysis
+1. **Profile Scraping**: Extracts content from X (Twitter) profiles including bio, name, and description
+2. **AI-Powered Classification**: Uses advanced AI to classify profiles as doctor, institution, or neither
+3. **Medical Indicator Detection**: Identifies medical credentials, specialties, and institutional affiliations
+4. **Intelligent Routing**: Automatically routes classified profiles to appropriate research functions
+5. **Confidence Scoring**: Provides reliability scores for both classification and subsequent research
+6. **Medical Watch Integration**: Specifically designed for Medical Watch account verification workflows
 
 ## Source Prioritization
 
@@ -324,6 +372,15 @@ Official NPI registry lookup including:
 - Provider status (Active/Inactive)
 - Entity type (Individual/Organizational)
 
+### 4. Analyze X/Twitter Profile
+Intelligent X profile analysis including:
+- **Profile Classification**: Automatically determines if profile belongs to doctor, institution, or neither
+- **Medical Indicator Detection**: Identifies medical credentials, specialties, and affiliations
+- **Intelligent Research Routing**: If classified as medical-related, performs appropriate research
+- **Medical Watch Verification**: Specifically designed for Medical Watch account verification
+- **Confidence Scoring**: Provides reliability scores for classification and research
+- **Comprehensive Output**: Returns both classification results and detailed medical information
+
 ## Error Handling
 
 The agent provides detailed error messages for common issues:
@@ -352,6 +409,13 @@ For issues or questions:
 5. For NPI lookups, verify the doctor practices in the United States
 
 ## Recent Updates
+
+### Version 1.2.0
+- **NEW: X/Twitter Profile Analysis** - Automatically classify X profiles as doctor, institution, or neither
+- **Medical Watch Integration** - Specifically designed for Medical Watch account verification workflows
+- **AI-Powered Classification** - Advanced AI determines profile type with confidence scoring
+- **Intelligent Research Routing** - Automatically performs appropriate research based on classification
+- **Enhanced Menu System** - Updated to 5 options including new X profile analysis
 
 ### Version 1.1.0
 - Added numbered menu system for better user experience

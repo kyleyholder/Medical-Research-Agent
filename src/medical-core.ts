@@ -19,6 +19,10 @@ import {
   NPIQuery,
   NPIInfo,
   NPIExtraction,
+  XProfileQuery,
+  XProfileClassification,
+  XProfileClassificationSchema,
+  XProfileAnalysis,
 } from './medical-schemas';
 import {
   medicalExtractionPrompt,
@@ -827,5 +831,242 @@ async function lookupNPI(npiQuery: NPIQuery): Promise<NPIInfo> {
   }
 }
 
-export { researchDoctor, researchInstitution, lookupNPI };
+
+// X Profile Analysis Functions
+
+// Helper function to normalize X username
+function normalizeXUsername(username: string): string {
+  // Remove @ symbol if present
+  const cleanUsername = username.replace(/^@/, '');
+  return cleanUsername;
+}
+
+// Helper function to construct X profile URL
+function constructXProfileURL(username: string): string {
+  const cleanUsername = normalizeXUsername(username);
+  return `https://x.com/${cleanUsername}`;
+}
+
+// Function to scrape X profile content
+async function scrapeXProfile(username: string): Promise<any> {
+  const profileUrl = constructXProfileURL(username);
+  log(`Scraping X profile: ${profileUrl}`);
+  
+  try {
+    // Use the existing web scraping function
+    const content = await enhancedWebScrape(profileUrl);
+    
+    if (!content || content.length < 50) {
+      log(`⚠️ X profile content too short or empty for ${username}`);
+      return null;
+    }
+    
+    return {
+      url: profileUrl,
+      content: content,
+      username: normalizeXUsername(username)
+    };
+  } catch (error) {
+    log(`❌ Error scraping X profile ${username}:`, error);
+    return null;
+  }
+}
+
+// Function to classify X profile using AI
+async function classifyXProfile(profileData: any): Promise<XProfileClassification> {
+  const model = getModel();
+  
+  const classificationPrompt = `Analyze this X (Twitter) profile and classify it as either a "doctor", "institution", or "neither".
+
+Profile URL: ${profileData.url}
+Profile Content: ${trimPrompt(profileData.content, 3000)}
+
+Classification Guidelines:
+
+DOCTOR indicators:
+- Dr., MD, DO, PhD, DDS, DVM titles
+- Medical specialties (cardiology, neurosurgery, pediatrics, etc.)
+- Academic medical titles (Professor, Assistant Professor, Resident)
+- Hospital/clinic affiliations in bio
+- Medical practice descriptions
+- Board certifications
+- Medical school affiliations
+
+INSTITUTION indicators:
+- Hospital, Clinic, Medical Center, Health System in name
+- "treating patients", "clinical practice", "healthcare"
+- Multiple locations mentioned
+- Research institution language
+- Healthcare organization descriptions
+- Medical education institutions
+
+NEITHER indicators:
+- No medical credentials or affiliations
+- Non-medical profession clearly stated
+- Personal/lifestyle content only
+- Business unrelated to healthcare
+- Student accounts (unless medical student)
+
+Provide:
+1. Classification: "doctor", "institution", or "neither"
+2. Confidence score (0.0 to 1.0)
+3. Clear reasoning for the decision
+4. Extracted name if available
+5. Extracted bio/description if available
+6. List of medical indicators found
+
+Be conservative - if unsure, classify as "neither" with lower confidence.`;
+
+  try {
+    const result = await generateObject({
+      model,
+      prompt: classificationPrompt,
+      schema: XProfileClassificationSchema,
+    });
+
+    log(`✅ X profile classified as: ${result.object.classification} (confidence: ${result.object.confidence})`);
+    return result.object;
+  } catch (error) {
+    log(`❌ Error classifying X profile:`, error);
+    return {
+      classification: "neither",
+      confidence: 0,
+      reasoning: "Error occurred during classification",
+      medical_indicators: []
+    };
+  }
+}
+
+// Main X profile analysis function
+async function analyzeXProfile(xQuery: XProfileQuery): Promise<XProfileAnalysis> {
+  log(`Starting X profile analysis for: ${xQuery.username}`);
+  
+  const username = normalizeXUsername(xQuery.username);
+  const profileUrl = constructXProfileURL(username);
+  
+  try {
+    // Step 1: Scrape the X profile
+    const profileData = await scrapeXProfile(username);
+    
+    if (!profileData) {
+      return {
+        username: username,
+        profile_url: profileUrl,
+        classification: "neither",
+        confidence_score: 0,
+        reasoning: "Could not access or scrape X profile",
+        last_updated: new Date().toISOString(),
+      };
+    }
+    
+    // Step 2: Classify the profile
+    const classification = await classifyXProfile(profileData);
+    
+    // Step 3: Based on classification, perform additional research
+    let doctorInfo = undefined;
+    let institutionInfo = undefined;
+    
+    if (classification.classification === "doctor" && classification.confidence > 0.6) {
+      log("Profile classified as doctor, performing doctor research...");
+      
+      if (classification.extracted_name) {
+        // Extract potential specialty from bio
+        const specialty = extractSpecialtyFromText(classification.extracted_bio || "");
+        
+        if (specialty) {
+          const doctorQuery: DoctorQuery = {
+            name: classification.extracted_name,
+            specialty: specialty,
+          };
+          
+          try {
+            doctorInfo = await researchDoctor(doctorQuery);
+          } catch (error) {
+            log("Error during doctor research:", error);
+          }
+        }
+      }
+    } else if (classification.classification === "institution" && classification.confidence > 0.6) {
+      log("Profile classified as institution, performing institution research...");
+      
+      if (classification.extracted_name) {
+        const institutionQuery: InstitutionQuery = {
+          name: classification.extracted_name,
+        };
+        
+        try {
+          institutionInfo = await researchInstitution(institutionQuery);
+        } catch (error) {
+          log("Error during institution research:", error);
+        }
+      }
+    }
+    
+    // Step 4: Compile results
+    const analysis: XProfileAnalysis = {
+      username: username,
+      profile_url: profileUrl,
+      classification: classification.classification,
+      confidence_score: classification.confidence,
+      reasoning: classification.reasoning,
+      doctor_info: doctorInfo,
+      institution_info: institutionInfo,
+      profile_data: {
+        display_name: classification.extracted_name,
+        bio: classification.extracted_bio,
+      },
+      last_updated: new Date().toISOString(),
+    };
+    
+    log(`✅ X profile analysis complete for ${username}`);
+    return analysis;
+    
+  } catch (error) {
+    log(`❌ Error during X profile analysis for ${username}:`, error);
+    return {
+      username: username,
+      profile_url: profileUrl,
+      classification: "neither",
+      confidence_score: 0,
+      reasoning: `Error during analysis: ${error instanceof Error ? error.message : String(error)}`,
+      last_updated: new Date().toISOString(),
+    };
+  }
+}
+
+// Helper function to extract medical specialty from text
+function extractSpecialtyFromText(text: string): string {
+  const specialties = [
+    "cardiology", "neurosurgery", "pediatrics", "oncology", "radiology",
+    "dermatology", "psychiatry", "orthopedics", "anesthesiology", "pathology",
+    "emergency medicine", "family medicine", "internal medicine", "surgery",
+    "neurology", "ophthalmology", "otolaryngology", "urology", "gastroenterology",
+    "endocrinology", "rheumatology", "pulmonology", "nephrology", "hematology",
+    "infectious disease", "critical care", "plastic surgery", "vascular surgery",
+    "thoracic surgery", "cardiac surgery", "pediatric surgery", "trauma surgery"
+  ];
+  
+  const lowerText = text.toLowerCase();
+  
+  for (const specialty of specialties) {
+    if (lowerText.includes(specialty)) {
+      return specialty.charAt(0).toUpperCase() + specialty.slice(1);
+    }
+  }
+  
+  // Look for common patterns
+  if (lowerText.includes("professor") && lowerText.includes("medicine")) {
+    return "Internal Medicine";
+  }
+  if (lowerText.includes("surgeon")) {
+    return "Surgery";
+  }
+  if (lowerText.includes("physician")) {
+    return "Internal Medicine";
+  }
+  
+  return "General Medicine";
+}
+
+export { researchDoctor, researchInstitution, lookupNPI, analyzeXProfile };
 
