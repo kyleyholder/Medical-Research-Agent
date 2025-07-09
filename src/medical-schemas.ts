@@ -133,8 +133,8 @@ export const XProfileClassificationSchema = z.object({
   classification: z.enum(["doctor", "institution", "neither"]).describe("Classification of the X profile"),
   confidence: z.number().min(0).max(1).describe("Confidence in the classification"),
   reasoning: z.string().describe("Explanation for the classification decision"),
-  extracted_name: z.string().optional().describe("Extracted name from the profile"),
-  extracted_bio: z.string().optional().describe("Extracted bio/description from the profile"),
+  extracted_name: z.string().describe("Extracted name from the profile (empty string if not found)"),
+  extracted_bio: z.string().describe("Extracted bio/description from the profile (empty string if not found)"),
   medical_indicators: z.array(z.string()).describe("Medical-related keywords or indicators found"),
 });
 

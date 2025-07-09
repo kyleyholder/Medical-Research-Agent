@@ -911,9 +911,11 @@ Provide:
 1. Classification: "doctor", "institution", or "neither"
 2. Confidence score (0.0 to 1.0)
 3. Clear reasoning for the decision
-4. Extracted name if available
-5. Extracted bio/description if available
-6. List of medical indicators found
+4. Extracted name (provide empty string "" if not found)
+5. Extracted bio/description (provide empty string "" if not found)
+6. List of medical indicators found (provide empty array [] if none)
+
+IMPORTANT: You MUST provide all fields. Use empty string "" for extracted_name and extracted_bio if not available, and empty array [] for medical_indicators if none found.
 
 Be conservative - if unsure, classify as "neither" with lower confidence.`;
 
@@ -932,6 +934,8 @@ Be conservative - if unsure, classify as "neither" with lower confidence.`;
       classification: "neither",
       confidence: 0,
       reasoning: "Error occurred during classification",
+      extracted_name: "",
+      extracted_bio: "",
       medical_indicators: []
     };
   }
