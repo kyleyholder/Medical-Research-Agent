@@ -300,7 +300,7 @@ async function handleXProfileAnalysis() {
       console.log(`🏢 Additional Workplaces: ${analysisResult.doctor_info.additional_workplaces.join(", ")}`);
     }
     console.log(`📊 Research Confidence: ${(analysisResult.doctor_info.confidence_score * 100).toFixed(1)}%`);
-    console.log(`🔗 Sources: ${analysisResult.doctor_info.sources.length} found`);
+    console.log(`🔗 Sources: ${analysisResult.doctor_info.sources?.length || 0} found`);
   } else if (analysisResult.classification === "institution" && analysisResult.institution_info) {
     console.log("\n🏥 Institution Research Results:");
     console.log("===============================");

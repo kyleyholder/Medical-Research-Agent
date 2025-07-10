@@ -847,27 +847,170 @@ function constructXProfileURL(username: string): string {
   return `https://x.com/${cleanUsername}`;
 }
 
-// Function to scrape X profile content
+// Function to scrape X profile content with multiple fallback methods
 async function scrapeXProfile(username: string): Promise<any> {
   const profileUrl = constructXProfileURL(username);
   log(`Scraping X profile: ${profileUrl}`);
   
   try {
-    // Use the existing web scraping function
-    const content = await enhancedWebScrape(profileUrl);
+    // Method 1: Try direct scraping with X-specific headers
+    const content = await scrapeXProfileDirect(profileUrl);
     
-    if (!content || content.length < 50) {
-      log(`⚠️ X profile content too short or empty for ${username}`);
+    if (content && content.length > 100 && !content.includes("JavaScript is not available")) {
+      return {
+        url: profileUrl,
+        content: content,
+        username: normalizeXUsername(username)
+      };
+    }
+    
+    // Method 2: If direct scraping fails, try alternative approach
+    log(`⚠️ Direct scraping failed for ${username}, trying alternative method...`);
+    const alternativeContent = await scrapeXProfileAlternative(username);
+    
+    if (alternativeContent) {
+      return {
+        url: profileUrl,
+        content: alternativeContent,
+        username: normalizeXUsername(username)
+      };
+    }
+    
+    log(`⚠️ All X profile scraping methods failed for ${username}`);
+    return null;
+    
+  } catch (error) {
+    log(`❌ Error scraping X profile ${username}:`, error);
+    return null;
+  }
+}
+
+// Direct X profile scraping with X-specific headers
+async function scrapeXProfileDirect(profileUrl: string): Promise<string | null> {
+  try {
+    const response = await fetch(profileUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      },
+      redirect: 'follow'
+    });
+
+    if (!response.ok) {
+      log(`X profile fetch failed: ${response.status} ${response.statusText}`);
+      return null;
+    }
+
+    const html = await response.text();
+    
+    // Extract profile information from HTML using regex patterns
+    const profileInfo = extractXProfileFromHTML(html);
+    return profileInfo;
+    
+  } catch (error) {
+    log(`Error in direct X profile scraping:`, error);
+    return null;
+  }
+}
+
+// Alternative method: Use web search to find profile information
+async function scrapeXProfileAlternative(username: string): Promise<string | null> {
+  try {
+    // Search for the X profile using Google
+    const searchQuery = `site:x.com ${username} OR site:twitter.com ${username}`;
+    const searchResults = await googleSearch(searchQuery, 3);
+    
+    if (searchResults.length === 0) {
       return null;
     }
     
-    return {
-      url: profileUrl,
-      content: content,
-      username: normalizeXUsername(username)
-    };
+    // Look for profile information in search snippets
+    let profileInfo = "";
+    for (const result of searchResults) {
+      if (result.link.includes(`x.com/${username}`) || result.link.includes(`twitter.com/${username}`)) {
+        profileInfo += `Title: ${result.title}\n`;
+        profileInfo += `Description: ${result.snippet}\n`;
+        profileInfo += `URL: ${result.link}\n\n`;
+      }
+    }
+    
+    if (profileInfo.length > 50) {
+      return `X Profile Information from Search Results:\n${profileInfo}`;
+    }
+    
+    return null;
+    
   } catch (error) {
-    log(`❌ Error scraping X profile ${username}:`, error);
+    log(`Error in alternative X profile scraping:`, error);
+    return null;
+  }
+}
+
+// Extract profile information from X HTML
+function extractXProfileFromHTML(html: string): string | null {
+  try {
+    let profileInfo = "";
+    
+    // Try to extract display name
+    const nameMatch = html.match(/<title[^>]*>([^<]+(?:\s*\(@[^)]+\))?\s*\/\s*X)<\/title>/i);
+    if (nameMatch) {
+      const fullTitle = nameMatch[1];
+      const nameOnly = fullTitle.replace(/\s*\/\s*X$/, '').trim();
+      profileInfo += `Display Name: ${nameOnly}\n`;
+    }
+    
+    // Try to extract bio from meta description
+    const bioMatch = html.match(/<meta\s+name="description"\s+content="([^"]+)"/i);
+    if (bioMatch) {
+      profileInfo += `Bio: ${bioMatch[1]}\n`;
+    }
+    
+    // Try to extract from JSON-LD structured data
+    const jsonLdMatch = html.match(/<script[^>]*type="application\/ld\+json"[^>]*>([^<]+)<\/script>/gi);
+    if (jsonLdMatch) {
+      for (const jsonScript of jsonLdMatch) {
+        try {
+          const jsonContent = jsonScript.replace(/<script[^>]*>/, '').replace(/<\/script>/, '');
+          const data = JSON.parse(jsonContent);
+          if (data.description) {
+            profileInfo += `Description: ${data.description}\n`;
+          }
+          if (data.name) {
+            profileInfo += `Name: ${data.name}\n`;
+          }
+        } catch (e) {
+          // Ignore JSON parsing errors
+        }
+      }
+    }
+    
+    // Try to extract from Open Graph tags
+    const ogTitleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i);
+    if (ogTitleMatch) {
+      profileInfo += `OG Title: ${ogTitleMatch[1]}\n`;
+    }
+    
+    const ogDescMatch = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i);
+    if (ogDescMatch) {
+      profileInfo += `OG Description: ${ogDescMatch[1]}\n`;
+    }
+    
+    return profileInfo.length > 20 ? profileInfo : null;
+    
+  } catch (error) {
+    log(`Error extracting profile from HTML:`, error);
     return null;
   }
 }
