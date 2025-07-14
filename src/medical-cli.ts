@@ -1,6 +1,6 @@
 import * as readline from 'readline';
 
-import { researchDoctor, researchInstitution, lookupNPI, analyzeXProfile } from './medical-core';
+import { researchDoctor, researchInstitution, lookupNPI, analyzeXProfile, searchNPIProgressive, formatNPIResult } from './medical-core';
 import { DoctorQuery, NPIQuery, XProfileQuery } from './medical-schemas';
 
 // Helper function for consistent logging
@@ -183,11 +183,12 @@ async function handleInstitutionResearch() {
   console.log(JSON.stringify(institutionResult, null, 2));
 }
 
-// Handle NPI lookup
+// Handle progressive NPI lookup
 async function handleNPILookup() {
   console.log("\n🔢 NPI Number Lookup");
   console.log("=====================\n");
 
+  // Step 1: Get first and last name (required)
   let firstName = "";
   while (!firstName.trim()) {
     firstName = await askQuestion("Enter the doctor's first name: ");
@@ -204,18 +205,105 @@ async function handleNPILookup() {
     }
   }
 
-  const state = await askQuestion("Enter state abbreviation (optional, e.g., 'CA', 'NY'): ");
-  const city = await askQuestion("Enter city (optional): ");
-  const specialty = await askQuestion("Enter specialty (optional): ");
+  console.log("\n🔍 Searching NPI registry...\n");
 
-  console.log("\n🔍 Looking up NPI information...\n");
+  // Step 2: Initial search with name only
+  let searchResult = await searchNPIProgressive(firstName.trim(), lastName.trim());
+  
+  if (searchResult.total_count === 0) {
+    console.log("❌ No providers found with that name.");
+    console.log("💡 Try checking the spelling or using a different name format.\n");
+    return;
+  }
 
+  console.log(`📊 Found ${searchResult.total_count} provider(s) with the name "${firstName} ${lastName}"`);
+
+  // Step 3: If multiple results, progressively filter
+  let state: string | undefined;
+  let city: string | undefined;
+  let specialty: string | undefined;
+
+  // Filter by state if too many results
+  if (searchResult.results.length > 10) {
+    console.log("\n🌍 Too many results found. Let's narrow it down...");
+    state = await askQuestion("Enter state abbreviation (e.g., 'CA', 'NY') or press Enter to skip: ");
+    
+    if (state && state.trim()) {
+      console.log(`\n🔍 Filtering by state: ${state.toUpperCase()}...\n`);
+      searchResult = await searchNPIProgressive(firstName.trim(), lastName.trim(), state.trim());
+      console.log(`📊 Found ${searchResult.total_count} provider(s) in ${state.toUpperCase()}`);
+    }
+  }
+
+  // Filter by city if still too many results
+  if (searchResult.results.length > 5) {
+    console.log("\n🏙️ Still multiple results. Let's narrow it down further...");
+    city = await askQuestion("Enter city or press Enter to skip: ");
+    
+    if (city && city.trim()) {
+      console.log(`\n🔍 Filtering by city: ${city}...\n`);
+      searchResult = await searchNPIProgressive(firstName.trim(), lastName.trim(), state, city.trim());
+      console.log(`📊 Found ${searchResult.total_count} provider(s) in ${city}`);
+    }
+  }
+
+  // Filter by specialty if still too many results
+  if (searchResult.results.length > 3) {
+    console.log("\n🩺 Still multiple results. Let's filter by specialty...");
+    specialty = await askQuestion("Enter specialty (e.g., 'Internal Medicine', 'Cardiology') or press Enter to skip: ");
+    
+    if (specialty && specialty.trim()) {
+      console.log(`\n🔍 Filtering by specialty: ${specialty}...\n`);
+      searchResult = await searchNPIProgressive(firstName.trim(), lastName.trim(), state, city, specialty.trim());
+      console.log(`📊 Found ${searchResult.total_count} provider(s) with specialty "${specialty}"`);
+    }
+  }
+
+  // Step 4: Handle results
+  if (searchResult.results.length === 0) {
+    console.log("❌ No providers found with the specified criteria.");
+    console.log("💡 Try using broader search terms or check the spelling.\n");
+    return;
+  }
+
+  let selectedResult;
+
+  if (searchResult.results.length === 1) {
+    // Only one result, use it
+    selectedResult = searchResult.results[0];
+    console.log("✅ Found exactly one provider matching your criteria!\n");
+  } else {
+    // Multiple results, let user choose
+    console.log(`\n📋 Found ${searchResult.results.length} providers. Please select one:\n`);
+    
+    // Display options
+    for (let i = 0; i < Math.min(searchResult.results.length, 10); i++) {
+      console.log(formatNPIResult(searchResult.results[i], i));
+    }
+    
+    if (searchResult.results.length > 10) {
+      console.log(`\n... and ${searchResult.results.length - 10} more results`);
+    }
+
+    // Get user selection
+    let selection = "";
+    while (!selection || isNaN(parseInt(selection)) || parseInt(selection) < 1 || parseInt(selection) > Math.min(searchResult.results.length, 10)) {
+      selection = await askQuestion(`\nEnter your choice (1-${Math.min(searchResult.results.length, 10)}): `);
+      if (!selection || isNaN(parseInt(selection)) || parseInt(selection) < 1 || parseInt(selection) > Math.min(searchResult.results.length, 10)) {
+        console.log("⚠️ Please enter a valid number from the list above.\n");
+      }
+    }
+
+    selectedResult = searchResult.results[parseInt(selection) - 1];
+  }
+
+  // Step 5: Convert selected result to NPIInfo format and display
   const npiQuery: NPIQuery = {
     first_name: firstName.trim(),
     last_name: lastName.trim(),
-    state: state.trim() || undefined,
-    city: city.trim() || undefined,
-    specialty: specialty.trim() || undefined,
+    state: state?.trim(),
+    city: city?.trim(),
+    specialty: specialty?.trim(),
   };
 
   const npiResult = await lookupNPI(npiQuery);

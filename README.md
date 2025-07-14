@@ -70,13 +70,25 @@ Enter the institution's name to find:
 - Social media profiles
 - Contact information
 
-#### Option 3: NPI Number Lookup
-Enter the following information:
+#### Option 3: NPI Number Lookup (Progressive Filtering)
+The NPI lookup now uses an improved progressive filtering approach for better user experience:
+
+**Step 1**: Enter basic information:
 - Doctor's first name
 - Doctor's last name
-- Optional state abbreviation (e.g., 'CA', 'NY')
-- Optional city
-- Optional specialty
+
+**Step 2**: Progressive refinement (only when needed):
+- If multiple results found, you'll be prompted for state
+- If still multiple results, you'll be prompted for city  
+- If still multiple results, you'll be prompted for specialty
+- If multiple results remain, you can select from a list
+
+**Benefits**:
+- Starts simple with just name
+- Only asks for additional details when necessary
+- Provides real-time result counts
+- Handles common names efficiently
+- Graceful fallbacks for edge cases
 
 #### Option 4: X/Twitter Profile Analysis
 Enter an X username (with or without @) to:
@@ -409,6 +421,14 @@ For issues or questions:
 5. For NPI lookups, verify the doctor practices in the United States
 
 ## Recent Updates
+
+### Version 1.3.0
+- **IMPROVED: Progressive NPI Filtering** - Enhanced NPI lookup with smart progressive filtering
+- **Better User Experience** - Start with just first/last name, progressively add filters only when needed
+- **Real-time Result Counts** - See how many providers match at each filtering step
+- **Smart Prompting** - Only asks for state, city, or specialty when multiple results exist
+- **Result Selection** - Choose from formatted list when multiple providers remain
+- **Graceful Fallbacks** - Helpful guidance when no results found or search too broad
 
 ### Version 1.2.0
 - **NEW: X/Twitter Profile Analysis** - Automatically classify X profiles as doctor, institution, or neither

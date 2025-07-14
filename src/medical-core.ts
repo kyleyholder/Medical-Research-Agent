@@ -705,7 +705,7 @@ function isValidUrl(url: string): boolean {
 
 
 
-// NPI lookup function using NPPES API
+// Enhanced NPI lookup function with progressive filtering
 async function lookupNPI(npiQuery: NPIQuery): Promise<NPIInfo> {
   log("Looking up NPI information...");
   
@@ -717,7 +717,7 @@ async function lookupNPI(npiQuery: NPIQuery): Promise<NPIInfo> {
       enumeration_type: "NPI-1", // Individual providers
       first_name: npiQuery.first_name,
       last_name: npiQuery.last_name,
-      limit: "10"
+      limit: "200" // Increased limit for better filtering
     });
 
     // Add optional parameters if provided
@@ -746,7 +746,7 @@ async function lookupNPI(npiQuery: NPIQuery): Promise<NPIInfo> {
     }
 
     const data = await response.json();
-    log("NPI API response:", JSON.stringify(data, null, 2));
+    log(`NPI API returned ${data.result_count || 0} results`);
 
     if (!data.results || data.results.length === 0) {
       return {
@@ -798,20 +798,19 @@ async function lookupNPI(npiQuery: NPIQuery): Promise<NPIInfo> {
     const npiInfo: NPIInfo = {
       npi_number: result.number || "Not found",
       name: nameWithCredential,
-      credential: credential,
       specialty: specialty,
       practice_address: formatAddress(practiceAddress),
-      mailing_address: mailingAddress ? formatAddress(mailingAddress) : undefined,
-      phone: practiceAddress?.telephone_number || undefined,
-      enumeration_date: result.enumeration_date || "Not found",
-      last_updated: result.last_updated_epoch ? new Date(parseInt(result.last_updated_epoch) * 1000).toISOString() : new Date().toISOString(),
-      status: basicInfo.status || "Unknown",
+      mailing_address: formatAddress(mailingAddress),
+      phone: practiceAddress?.telephone_number || "Not found",
+      enumeration_date: basicInfo.enumeration_date || "Not found",
+      last_updated: basicInfo.last_updated || new Date().toISOString(),
+      status: basicInfo.status || "Active",
       entity_type: result.enumeration_type === "NPI-1" ? "Individual Provider" : "Organizational Provider",
       sources: [apiUrl],
-      confidence_score: 0.9, // High confidence for official NPI registry
+      confidence_score: 0.9,
     };
 
-    log("✅ NPI lookup successful:", npiInfo.npi_number);
+    log("✅ NPI lookup completed successfully");
     return npiInfo;
 
   } catch (error) {
@@ -821,7 +820,7 @@ async function lookupNPI(npiQuery: NPIQuery): Promise<NPIInfo> {
       name: `${npiQuery.first_name} ${npiQuery.last_name}`,
       specialty: "Error during lookup",
       practice_address: "Error during lookup",
-      enumeration_date: "Error",
+      enumeration_date: "Error during lookup",
       last_updated: new Date().toISOString(),
       status: "Error",
       entity_type: "Individual Provider",
@@ -829,6 +828,71 @@ async function lookupNPI(npiQuery: NPIQuery): Promise<NPIInfo> {
       confidence_score: 0,
     };
   }
+}
+
+// New function for progressive NPI search with multiple results
+async function searchNPIProgressive(firstName: string, lastName: string, state?: string, city?: string, specialty?: string): Promise<{ results: any[], total_count: number }> {
+  log("Performing progressive NPI search...");
+  
+  try {
+    const baseUrl = "https://npiregistry.cms.hhs.gov/api/";
+    const params = new URLSearchParams({
+      version: "2.1",
+      enumeration_type: "NPI-1",
+      first_name: firstName,
+      last_name: lastName,
+      limit: "50"
+    });
+
+    if (state) params.append("state", state.toUpperCase());
+    if (city) params.append("city", city);
+    if (specialty) params.append("taxonomy_description", specialty);
+
+    const apiUrl = `${baseUrl}?${params.toString()}`;
+    log("Progressive NPI search URL:", apiUrl);
+
+    const response = await fetch(apiUrl, {
+      headers: {
+        'User-Agent': 'Medical-Research-Agent/1.0',
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`NPI API request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    return {
+      results: data.results || [],
+      total_count: data.result_count || 0
+    };
+
+  } catch (error) {
+    log("❌ Error during progressive NPI search:", error);
+    return { results: [], total_count: 0 };
+  }
+}
+
+// Helper function to format NPI result for display
+function formatNPIResult(result: any, index: number): string {
+  const basicInfo = result.basic || {};
+  const addresses = result.addresses || [];
+  const taxonomies = result.taxonomies || [];
+  
+  const practiceAddress = addresses.find(addr => addr.address_purpose === "LOCATION") || addresses[0];
+  const primaryTaxonomy = taxonomies.find(tax => tax.primary === true) || taxonomies[0];
+  
+  const credential = basicInfo.credential || "";
+  const fullName = `${basicInfo.first_name || ""} ${basicInfo.last_name || ""}`.trim();
+  const nameWithCredential = credential ? `${fullName}, ${credential}` : fullName;
+  
+  const city = practiceAddress?.city || "Unknown";
+  const state = practiceAddress?.state || "Unknown";
+  const specialty = primaryTaxonomy?.desc || "Not specified";
+  
+  return `${index + 1}. ${nameWithCredential} - ${specialty} (${city}, ${state})`;
 }
 
 
@@ -1215,5 +1279,5 @@ function extractSpecialtyFromText(text: string): string {
   return "General Medicine";
 }
 
-export { researchDoctor, researchInstitution, lookupNPI, analyzeXProfile };
+export { researchDoctor, researchInstitution, lookupNPI, analyzeXProfile, searchNPIProgressive, formatNPIResult };
 
