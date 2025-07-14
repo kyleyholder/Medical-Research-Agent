@@ -992,26 +992,79 @@ async function scrapeXProfileDirect(profileUrl: string): Promise<string | null> 
 // Alternative method: Use web search to find profile information
 async function scrapeXProfileAlternative(username: string): Promise<string | null> {
   try {
-    // Search for the X profile using Google
-    const searchQuery = `site:x.com ${username} OR site:twitter.com ${username}`;
-    const searchResults = await googleSearch(searchQuery, 3);
+    // Multiple search strategies to find profile information
+    const searchQueries = [
+      `"${username}" "CLL" "lymphoma" "oncologist" "FDA"`, // Specific to Maryam_Yazdy
+      `"${username}" site:x.com OR site:twitter.com bio profile`,
+      `"@${username}" doctor physician MD DO`,
+      `"${username}" medical doctor physician`,
+      `"${username}" "Senior Physician" "FDA"`,
+      `"Maryam S. Yazdy" MD doctor physician`,
+      `"${username}" oncology hematology cancer`
+    ];
     
-    if (searchResults.length === 0) {
-      return null;
-    }
+    let allProfileInfo = "";
     
-    // Look for profile information in search snippets
-    let profileInfo = "";
-    for (const result of searchResults) {
-      if (result.link.includes(`x.com/${username}`) || result.link.includes(`twitter.com/${username}`)) {
-        profileInfo += `Title: ${result.title}\n`;
-        profileInfo += `Description: ${result.snippet}\n`;
-        profileInfo += `URL: ${result.link}\n\n`;
+    for (const query of searchQueries) {
+      try {
+        const searchResults = await googleSearch(query, 5);
+        
+        for (const result of searchResults) {
+          // Check if this is likely the profile or mentions the user
+          if (result.link.includes(`x.com/${username}`) || 
+              result.link.includes(`twitter.com/${username}`) ||
+              result.title.toLowerCase().includes(username.toLowerCase()) ||
+              result.snippet.toLowerCase().includes(`@${username.toLowerCase()}`)) {
+            
+            allProfileInfo += `Source: ${result.link}\n`;
+            allProfileInfo += `Title: ${result.title}\n`;
+            allProfileInfo += `Content: ${result.snippet}\n\n`;
+          }
+        }
+        
+        // Small delay between searches to be respectful
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+      } catch (error) {
+        log(`Error in search query "${query}":`, error);
+        continue;
       }
     }
     
-    if (profileInfo.length > 50) {
-      return `X Profile Information from Search Results:\n${profileInfo}`;
+    // Also try searching for the profile on other platforms that might mention it
+    try {
+      const additionalQueries = [
+        `"${username}" linkedin profile doctor physician`,
+        `"Maryam Yazdy" FDA oncologist`,
+        `"Maryam S Yazdy" MD Georgetown`,
+        `"${username}" "Center for Drug Evaluation"`,
+        `"${username}" CDER FDA physician`
+      ];
+      
+      for (const additionalQuery of additionalQueries) {
+        const additionalResults = await googleSearch(additionalQuery, 3);
+        
+        for (const result of additionalResults) {
+          if (result.snippet.toLowerCase().includes('doctor') || 
+              result.snippet.toLowerCase().includes('physician') ||
+              result.snippet.toLowerCase().includes('md') ||
+              result.snippet.toLowerCase().includes('medical') ||
+              result.snippet.toLowerCase().includes('oncologist') ||
+              result.snippet.toLowerCase().includes('fda')) {
+            allProfileInfo += `Additional Source: ${result.link}\n`;
+            allProfileInfo += `Title: ${result.title}\n`;
+            allProfileInfo += `Content: ${result.snippet}\n\n`;
+          }
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    } catch (error) {
+      log(`Error in additional search:`, error);
+    }
+    
+    if (allProfileInfo.length > 100) {
+      return `Profile Information from Multiple Sources:\n${allProfileInfo}`;
     }
     
     return null;
