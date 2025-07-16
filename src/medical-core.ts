@@ -1201,7 +1201,7 @@ Be conservative - if unsure, classify as "neither" with lower confidence.`;
   }
 }
 
-// Main X profile analysis function
+// Main X profile analysis function - classification only
 async function analyzeXProfile(xQuery: XProfileQuery): Promise<XProfileAnalysis> {
   log(`Starting X profile analysis for: ${xQuery.username}`);
   
@@ -1223,58 +1223,16 @@ async function analyzeXProfile(xQuery: XProfileQuery): Promise<XProfileAnalysis>
       };
     }
     
-    // Step 2: Classify the profile
+    // Step 2: Classify the profile (no automatic research)
     const classification = await classifyXProfile(profileData);
     
-    // Step 3: Based on classification, perform additional research
-    let doctorInfo = undefined;
-    let institutionInfo = undefined;
-    
-    if (classification.classification === "doctor" && classification.confidence > 0.6) {
-      log("Profile classified as doctor, performing doctor research...");
-      
-      if (classification.extracted_name) {
-        // Extract potential specialty from bio
-        const specialty = extractSpecialtyFromText(classification.extracted_bio || "");
-        
-        if (specialty) {
-          const doctorQuery: DoctorQuery = {
-            name: classification.extracted_name,
-            specialty: specialty,
-          };
-          
-          try {
-            doctorInfo = await researchDoctor(doctorQuery);
-          } catch (error) {
-            log("Error during doctor research:", error);
-          }
-        }
-      }
-    } else if (classification.classification === "institution" && classification.confidence > 0.6) {
-      log("Profile classified as institution, performing institution research...");
-      
-      if (classification.extracted_name) {
-        const institutionQuery: InstitutionQuery = {
-          name: classification.extracted_name,
-        };
-        
-        try {
-          institutionInfo = await researchInstitution(institutionQuery);
-        } catch (error) {
-          log("Error during institution research:", error);
-        }
-      }
-    }
-    
-    // Step 4: Compile results
+    // Step 3: Return classification results only
     const analysis: XProfileAnalysis = {
       username: username,
       profile_url: profileUrl,
       classification: classification.classification,
       confidence_score: classification.confidence,
       reasoning: classification.reasoning,
-      doctor_info: doctorInfo,
-      institution_info: institutionInfo,
       profile_data: {
         display_name: classification.extracted_name,
         bio: classification.extracted_bio,
