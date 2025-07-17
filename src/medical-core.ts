@@ -32,7 +32,15 @@ import {
 
 // Helper function for consistent logging
 function log(...args: any[]) {
-  console.log(...args);
+  // Only log if not in quiet mode
+  if (!process.env.QUIET_MODE) {
+    console.log(...args);
+  }
+}
+
+// Helper function for quiet progress updates
+function quietLog(message: string) {
+  console.log(message);
 }
 
 // Helper function to trim prompts to fit context
@@ -914,7 +922,6 @@ function constructXProfileURL(username: string): string {
 // Function to scrape X profile content with multiple fallback methods
 async function scrapeXProfile(username: string): Promise<any> {
   const profileUrl = constructXProfileURL(username);
-  log(`Scraping X profile: ${profileUrl}`);
   
   try {
     // Method 1: Try direct scraping with X-specific headers
@@ -929,7 +936,6 @@ async function scrapeXProfile(username: string): Promise<any> {
     }
     
     // Method 2: If direct scraping fails, try alternative approach
-    log(`⚠️ Direct scraping failed for ${username}, trying alternative method...`);
     const alternativeContent = await scrapeXProfileAlternative(username);
     
     if (alternativeContent) {
@@ -940,7 +946,6 @@ async function scrapeXProfile(username: string): Promise<any> {
       };
     }
     
-    log(`⚠️ All X profile scraping methods failed for ${username}`);
     return null;
     
   } catch (error) {
@@ -1186,7 +1191,6 @@ Be conservative - if unsure, classify as "neither" with lower confidence.`;
       schema: XProfileClassificationSchema,
     });
 
-    log(`✅ X profile classified as: ${result.object.classification} (confidence: ${result.object.confidence})`);
     return result.object;
   } catch (error) {
     log(`❌ Error classifying X profile:`, error);
@@ -1203,8 +1207,6 @@ Be conservative - if unsure, classify as "neither" with lower confidence.`;
 
 // Main X profile analysis function - classification only
 async function analyzeXProfile(xQuery: XProfileQuery): Promise<XProfileAnalysis> {
-  log(`Starting X profile analysis for: ${xQuery.username}`);
-  
   const username = normalizeXUsername(xQuery.username);
   const profileUrl = constructXProfileURL(username);
   
@@ -1240,7 +1242,6 @@ async function analyzeXProfile(xQuery: XProfileQuery): Promise<XProfileAnalysis>
       last_updated: new Date().toISOString(),
     };
     
-    log(`✅ X profile analysis complete for ${username}`);
     return analysis;
     
   } catch (error) {

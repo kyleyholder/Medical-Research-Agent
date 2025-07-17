@@ -109,7 +109,10 @@ async function handleDoctorResearch() {
   const locationHint = await askQuestion("Enter a location hint (optional, press Enter to skip): ");
   const institutionHint = await askQuestion("Enter an institution hint (optional, press Enter to skip): ");
 
-  console.log("\n🔍 Starting comprehensive research...\n");
+  console.log("\n🔍 Researching...");
+
+  // Set quiet mode to reduce verbose logging
+  process.env.QUIET_MODE = "true";
 
   const doctorQuery: DoctorQuery = {
     name: name.trim(),
@@ -120,30 +123,21 @@ async function handleDoctorResearch() {
 
   const result = await researchDoctor(doctorQuery);
 
-  console.log("\n✅ Research Complete!");
-  console.log("====================");
-  console.log("\n📊 Summary:");
-  console.log(`👨‍⚕️ Doctor: ${result.name}`);
-  console.log(`🏥 Specialty: ${result.specialty}`);
-  console.log(`📍 Location: ${result.location}`);
-  console.log(`🏢 Workplace: ${result.workplace}`);
+  // Reset quiet mode
+  delete process.env.QUIET_MODE;
+
+  console.log("\n✅ Doctor Found!");
+  console.log("================");
+  console.log(`👨‍⚕️ ${result.name}`);
+  console.log(`🏥 ${result.specialty}`);
+  console.log(`📍 ${result.location}`);
+  console.log(`🏢 ${result.workplace}`);
+  
   if (result.additional_workplaces && result.additional_workplaces.length > 0) {
-    console.log(`🏢 Additional Workplaces: ${result.additional_workplaces.join(", ")}`);
+    console.log(`🏢 Also works at: ${result.additional_workplaces.join(", ")}`);
   }
-  if (result.additional_locations && result.additional_locations.length > 0) {
-    console.log(`📍 Additional Locations: ${result.additional_locations.join(", ")}`);
-  }
-  console.log(`📊 Confidence Score: ${(result.confidence_score * 100).toFixed(1)}%`);
-  console.log(`🔗 Sources Found: ${result.sources?.length || 0}`);
-
-  if (result.sources && result.sources.length > 5) {
-    console.log(`   📄 First 5 sources: ${result.sources.slice(0, 5).join(", ")}`);
-    console.log(`   ... and ${result.sources.length - 5} more sources`);
-  }
-
-  console.log("\n📄 Full JSON Output:");
-  console.log("=".repeat(50));
-  console.log(JSON.stringify(result, null, 2));
+  
+  console.log(`📊 Confidence: ${(result.confidence_score * 100).toFixed(0)}%`);
 }
 
 // Handle institution research
@@ -159,28 +153,24 @@ async function handleInstitutionResearch() {
     }
   }
 
-  console.log("\n🔍 Starting research for institution...\n");
+  console.log("\n🔍 Researching...");
+  
+  // Set quiet mode
+  process.env.QUIET_MODE = "true";
   const institutionQuery = { name: institutionName };
   const institutionResult = await researchInstitution(institutionQuery);
+  delete process.env.QUIET_MODE;
 
-  console.log("\n✅ Research Complete!");
+  console.log("\n✅ Institution Found!");
   console.log("====================");
-  console.log("\n📊 Summary:");
-  console.log(`🏢 Institution Name: ${institutionResult.name}`);
-  console.log(`📍 Location: ${institutionResult.location}`);
+  console.log(`🏢 ${institutionResult.name}`);
+  console.log(`📍 ${institutionResult.location}`);
+  
   if (institutionResult.websites && institutionResult.websites.length > 0) {
-    console.log(`🔗 Websites: ${institutionResult.websites.join(", ")}`);
+    console.log(`🔗 ${institutionResult.websites[0]}`);
   }
-  if (institutionResult.social_media && institutionResult.social_media.length > 0) {
-    console.log(`📱 Social Media: ${institutionResult.social_media.join(", ")}`);
-  }
-  console.log(`📊 Confidence Score: ${(institutionResult.confidence_score * 100).toFixed(1)}%`);
-  if (institutionResult.sources && institutionResult.sources.length > 0) {
-    console.log(`🔗 Sources Found: ${institutionResult.sources.length}`);
-  }
-  console.log("\n📄 Full JSON Output:");
-  console.log("=".repeat(50));
-  console.log(JSON.stringify(institutionResult, null, 2));
+  
+  console.log(`📊 Confidence: ${(institutionResult.confidence_score * 100).toFixed(0)}%`);
 }
 
 // Handle progressive NPI lookup
@@ -308,33 +298,18 @@ async function handleNPILookup() {
 
   const npiResult = await lookupNPI(npiQuery);
 
-  console.log("\n✅ NPI Lookup Complete!");
-  console.log("========================");
-  console.log("\n📊 Summary:");
-  console.log(`🔢 NPI Number: ${npiResult.npi_number}`);
-  console.log(`👨‍⚕️ Name: ${npiResult.name}`);
-  console.log(`🏥 Specialty: ${npiResult.specialty}`);
-  console.log(`📍 Practice Address: ${npiResult.practice_address}`);
-  if (npiResult.mailing_address) {
-    console.log(`📮 Mailing Address: ${npiResult.mailing_address}`);
-  }
+  console.log("\n✅ NPI Found!");
+  console.log("==============");
+  console.log(`🔢 NPI: ${npiResult.npi_number}`);
+  console.log(`👨‍⚕️ ${npiResult.name}`);
+  console.log(`🏥 ${npiResult.specialty}`);
+  console.log(`📍 ${npiResult.practice_address}`);
   if (npiResult.phone) {
-    console.log(`📞 Phone: ${npiResult.phone}`);
+    console.log(`📞 ${npiResult.phone}`);
   }
-  console.log(`📅 Enumeration Date: ${npiResult.enumeration_date}`);
-  console.log(`🔄 Last Updated: ${npiResult.last_updated}`);
   console.log(`✅ Status: ${npiResult.status}`);
-  console.log(`🏷️ Entity Type: ${npiResult.entity_type}`);
-  console.log(`📊 Confidence Score: ${(npiResult.confidence_score * 100).toFixed(1)}%`);
-
-  console.log("\n📄 Full JSON Output:");
-  console.log("=".repeat(50));
-  console.log(JSON.stringify(npiResult, null, 2));
+  console.log(`📊 Confidence: ${(npiResult.confidence_score * 100).toFixed(0)}%`);
 }
-
-// Start the application
-runMedicalResearch().catch(console.error);
-
 
 // Handle X profile analysis with user choice for in-depth research
 async function handleXProfileAnalysis() {
@@ -351,29 +326,27 @@ async function handleXProfileAnalysis() {
 
   console.log("\n🔍 Analyzing X profile...\n");
 
+  // Set quiet mode to reduce verbose logging
+  process.env.QUIET_MODE = "true";
+
   const xQuery: XProfileQuery = {
     username: username.trim(),
   };
 
   const analysisResult = await analyzeXProfile(xQuery);
 
-  console.log("\n✅ X Profile Analysis Complete!");
-  console.log("===============================");
-  console.log("\n📊 Classification Summary:");
-  console.log(`🐦 Username: @${analysisResult.username}`);
-  console.log(`🔗 Profile URL: ${analysisResult.profile_url}`);
-  console.log(`🏷️ Classification: ${analysisResult.classification.toUpperCase()}`);
-  console.log(`📊 Confidence Score: ${(analysisResult.confidence_score * 100).toFixed(1)}%`);
-  console.log(`💭 Reasoning: ${analysisResult.reasoning}`);
+  // Reset quiet mode
+  delete process.env.QUIET_MODE;
 
-  if (analysisResult.profile_data) {
-    console.log("\n📋 Profile Data:");
-    if (analysisResult.profile_data.display_name) {
-      console.log(`👤 Display Name: ${analysisResult.profile_data.display_name}`);
-    }
-    if (analysisResult.profile_data.bio) {
-      console.log(`📝 Bio: ${analysisResult.profile_data.bio}`);
-    }
+  // Clean, simple output
+  console.log("✅ Profile Analyzed!");
+  console.log("===================");
+  console.log(`🐦 @${analysisResult.username}`);
+  console.log(`🏷️ ${analysisResult.classification.toUpperCase()}`);
+  console.log(`📊 ${(analysisResult.confidence_score * 100).toFixed(0)}% confidence`);
+  
+  if (analysisResult.profile_data?.display_name) {
+    console.log(`👤 ${analysisResult.profile_data.display_name}`);
   }
 
   // Ask user if they want in-depth analysis for doctor or institution
@@ -383,7 +356,7 @@ async function handleXProfileAnalysis() {
     
     if (wantInDepth.toLowerCase().startsWith("y")) {
       if (analysisResult.classification === "doctor") {
-        console.log("\n🔄 Performing detailed doctor research...");
+        console.log("\n🔄 Researching doctor profile...");
         
         // Extract name for doctor research
         const doctorName = analysisResult.profile_data?.display_name || analysisResult.username;
@@ -391,76 +364,77 @@ async function handleXProfileAnalysis() {
           name: doctorName,
         };
         
+        // Set quiet mode for doctor research
+        process.env.QUIET_MODE = "true";
+        
         try {
           const doctorResult = await researchDoctor(doctorQuery);
           
-          console.log("\n👨‍⚕️ Doctor Research Results:");
-          console.log("============================");
-          console.log(`👨‍⚕️ Name: ${doctorResult.name}`);
-          console.log(`🏥 Specialty: ${doctorResult.specialty}`);
-          console.log(`📍 Location: ${doctorResult.location}`);
-          console.log(`🏢 Workplace: ${doctorResult.workplace}`);
-          if (doctorResult.additional_workplaces && doctorResult.additional_workplaces.length > 0) {
-            console.log(`🏢 Additional Workplaces: ${doctorResult.additional_workplaces.join(", ")}`);
-          }
-          console.log(`📊 Research Confidence: ${(doctorResult.confidence_score * 100).toFixed(1)}%`);
-          console.log(`🔗 Sources: ${doctorResult.sources?.length || 0} found`);
+          // Reset quiet mode
+          delete process.env.QUIET_MODE;
           
-          console.log("\n📄 Full Doctor Research JSON:");
-          console.log("=".repeat(50));
-          console.log(JSON.stringify(doctorResult, null, 2));
+          console.log("\n✅ Doctor Found!");
+          console.log("================");
+          console.log(`👨‍⚕️ ${doctorResult.name}`);
+          console.log(`🏥 ${doctorResult.specialty}`);
+          console.log(`📍 ${doctorResult.location}`);
+          console.log(`🏢 ${doctorResult.workplace}`);
+          
+          if (doctorResult.additional_workplaces && doctorResult.additional_workplaces.length > 0) {
+            console.log(`🏢 Also works at: ${doctorResult.additional_workplaces.join(", ")}`);
+          }
+          
+          console.log(`📊 Confidence: ${(doctorResult.confidence_score * 100).toFixed(0)}%`);
           
         } catch (error) {
-          console.log("❌ Error during doctor research:", error);
+          delete process.env.QUIET_MODE;
+          console.log("❌ Error during doctor research");
         }
         
       } else if (analysisResult.classification === "institution") {
-        console.log("\n🔄 Performing detailed institution research...");
+        console.log("\n🔄 Researching institution...");
         
         // Extract name for institution research
         const institutionName = analysisResult.profile_data?.display_name || analysisResult.username;
-        const institutionQuery: InstitutionQuery = {
+        const institutionQuery = {
           name: institutionName,
         };
+        
+        // Set quiet mode for institution research
+        process.env.QUIET_MODE = "true";
         
         try {
           const institutionResult = await researchInstitution(institutionQuery);
           
-          console.log("\n🏥 Institution Research Results:");
-          console.log("===============================");
-          console.log(`🏢 Name: ${institutionResult.name}`);
-          console.log(`📍 Location: ${institutionResult.location}`);
+          // Reset quiet mode
+          delete process.env.QUIET_MODE;
+          
+          console.log("\n✅ Institution Found!");
+          console.log("====================");
+          console.log(`🏢 ${institutionResult.name}`);
+          console.log(`📍 ${institutionResult.location}`);
+          
           if (institutionResult.websites && institutionResult.websites.length > 0) {
-            console.log(`🔗 Websites: ${institutionResult.websites.join(", ")}`);
-          }
-          if (institutionResult.social_media && institutionResult.social_media.length > 0) {
-            console.log(`📱 Social Media: ${institutionResult.social_media.join(", ")}`);
-          }
-          console.log(`📊 Research Confidence: ${(institutionResult.confidence_score * 100).toFixed(1)}%`);
-          if (institutionResult.sources) {
-            console.log(`🔗 Sources: ${institutionResult.sources.length} found`);
+            console.log(`🔗 ${institutionResult.websites[0]}`);
           }
           
-          console.log("\n📄 Full Institution Research JSON:");
-          console.log("=".repeat(50));
-          console.log(JSON.stringify(institutionResult, null, 2));
+          console.log(`📊 Confidence: ${(institutionResult.confidence_score * 100).toFixed(0)}%`);
           
         } catch (error) {
-          console.log("❌ Error during institution research:", error);
+          delete process.env.QUIET_MODE;
+          console.log("❌ Error during institution research");
         }
       }
     } else {
-      console.log("\n✅ Classification complete. No additional research performed.");
+      console.log("\n✅ Classification complete.");
     }
   } else if (analysisResult.classification === "neither") {
     console.log("\n❌ Not Medical-Related");
     console.log("======================");
-    console.log("This X profile does not appear to be associated with a medical professional or institution.");
-    console.log("This is useful for Medical Watch verification - the account may not be medically relevant.");
+    console.log("This account does not appear to be medically related.");
   }
-
-  console.log("\n📄 Classification JSON Output:");
-  console.log("=".repeat(50));
-  console.log(JSON.stringify(analysisResult, null, 2));
 }
+
+// Start the application
+runMedicalResearch().catch(console.error);
 
