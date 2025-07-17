@@ -134,9 +134,9 @@ async function handleDoctorResearch() {
     console.log(`📍 Additional Locations: ${result.additional_locations.join(", ")}`);
   }
   console.log(`📊 Confidence Score: ${(result.confidence_score * 100).toFixed(1)}%`);
-  console.log(`🔗 Sources Found: ${result.sources.length}`);
+  console.log(`🔗 Sources Found: ${result.sources?.length || 0}`);
 
-  if (result.sources.length > 5) {
+  if (result.sources && result.sources.length > 5) {
     console.log(`   📄 First 5 sources: ${result.sources.slice(0, 5).join(", ")}`);
     console.log(`   ... and ${result.sources.length - 5} more sources`);
   }
