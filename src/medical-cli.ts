@@ -1,7 +1,7 @@
 import * as readline from 'readline';
 
-import { researchDoctor, researchInstitution, lookupNPI, analyzeXProfile, searchNPIProgressive, formatNPIResult } from './medical-core';
-import { DoctorQuery, NPIQuery, XProfileQuery } from './medical-schemas';
+import { researchDoctor, researchInstitution, lookupNPI, analyzeXProfile, searchNPIProgressive, formatNPIResult, findDoctorSocialMedia } from './medical-core';
+import { DoctorQuery, NPIQuery, XProfileQuery, SocialMediaQuery } from './medical-schemas';
 
 // Helper function for consistent logging
 function log(...args: any[]) {
@@ -32,7 +32,8 @@ function displayMenu() {
   console.log("2. Find medical institution location");
   console.log("3. Find NPI number for US doctor");
   console.log("4. Analyze X/Twitter profile");
-  console.log("5. Exit\n");
+  console.log("5. Find doctor's social media & websites");
+  console.log("6. Exit\n");
 }
 
 // Main CLI function
@@ -42,14 +43,14 @@ async function runMedicalResearch() {
       displayMenu();
       
       let choice = "";
-      while (!["1", "2", "3", "4", "5"].includes(choice)) {
-        choice = await askQuestion("Enter your choice (1-5): ");
-        if (!["1", "2", "3", "4", "5"].includes(choice)) {
-          console.log("⚠️ Please enter a valid option (1-5).\n");
+      while (!["1", "2", "3", "4", "5", "6"].includes(choice)) {
+        choice = await askQuestion("Enter your choice (1-6): ");
+        if (!["1", "2", "3", "4", "5", "6"].includes(choice)) {
+          console.log("⚠️ Please enter a valid option (1-6).\n");
         }
       }
 
-      if (choice === "5") {
+      if (choice === "6") {
         console.log("\n👋 Thank you for using the Medical Research Agent!");
         break;
       }
@@ -66,6 +67,9 @@ async function runMedicalResearch() {
       } else if (choice === "4") {
         // X profile analysis
         await handleXProfileAnalysis();
+      } else if (choice === "5") {
+        // Social media & website finder
+        await handleSocialMediaFinder();
       }
 
       // Ask if user wants to continue
@@ -432,6 +436,96 @@ async function handleXProfileAnalysis() {
     console.log("\n❌ Not Medical-Related");
     console.log("======================");
     console.log("This account does not appear to be medically related.");
+  }
+}
+
+// Handle social media & website finder
+async function handleSocialMediaFinder() {
+  console.log("\n🔗 Social Media & Website Finder");
+  console.log("=================================\n");
+
+  let name = "";
+  while (!name.trim()) {
+    name = await askQuestion("Enter the doctor's full name: ");
+    if (!name.trim()) {
+      console.log("⚠️ Please enter a doctor's name to continue.\n");
+    }
+  }
+
+  const specialty = await askQuestion("Enter medical specialty (optional, press Enter to skip): ");
+  const institution = await askQuestion("Enter institution/workplace (optional, press Enter to skip): ");
+  const xUsername = await askQuestion("Enter X/Twitter username if known (optional, press Enter to skip): ");
+
+  const query: SocialMediaQuery = {
+    name: name.trim(),
+    specialty: specialty.trim() || undefined,
+    institution: institution.trim() || undefined,
+    x_username: xUsername.trim() || undefined,
+  };
+
+  console.log("\n🔍 Searching for social media profiles and websites...");
+
+  try {
+    const result = await findDoctorSocialMedia(query);
+
+    console.log("\n✅ Social Media & Websites Found!");
+    console.log("==================================");
+    console.log(`👤 ${result.doctor_name}`);
+    console.log(`🏥 ${result.specialty}`);
+    console.log(`📊 Overall Confidence: ${(result.confidence_score * 100).toFixed(0)}%`);
+    console.log(`🔗 Total Found: ${result.total_found} profiles/websites\n`);
+
+    if (result.results.length === 0) {
+      console.log("❌ No social media profiles or websites found.");
+      console.log("Try searching with different name variations or adding specialty/institution information.");
+    } else {
+      // Group results by platform type
+      const groupedResults = result.results.reduce((groups, item) => {
+        const platform = item.platform;
+        if (!groups[platform]) groups[platform] = [];
+        groups[platform].push(item);
+        return groups;
+      }, {} as Record<string, typeof result.results>);
+
+      // Display results by platform type
+      const platformEmojis = {
+        linkedin: "💼",
+        personal_website: "🌐",
+        faculty_page: "🏫",
+        research_profile: "🔬",
+        practice_website: "🏥",
+        other: "🔗"
+      };
+
+      const platformNames = {
+        linkedin: "LinkedIn",
+        personal_website: "Personal Website",
+        faculty_page: "Faculty Page",
+        research_profile: "Research Profile",
+        practice_website: "Practice Website",
+        other: "Other"
+      };
+
+      for (const [platform, items] of Object.entries(groupedResults)) {
+        const emoji = platformEmojis[platform as keyof typeof platformEmojis] || "🔗";
+        const name = platformNames[platform as keyof typeof platformNames] || "Other";
+        
+        console.log(`${emoji} ${name}:`);
+        for (const item of items) {
+          console.log(`   ${item.url}`);
+          console.log(`   📝 ${item.title}`);
+          console.log(`   📊 ${(item.verification_score * 100).toFixed(0)}% confidence`);
+          if (item.verification_factors.length > 0) {
+            console.log(`   ✅ ${item.verification_factors.join(", ")}`);
+          }
+          console.log("");
+        }
+      }
+    }
+
+  } catch (error) {
+    console.error("❌ Error during social media search:", error);
+    console.error("Details:", error instanceof Error ? error.message : String(error));
   }
 }
 

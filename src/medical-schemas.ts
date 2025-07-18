@@ -188,3 +188,41 @@ export type XProfileQuery = z.infer<typeof XProfileQuerySchema>;
 export type XProfileClassification = z.infer<typeof XProfileClassificationSchema>;
 export type XProfileAnalysis = z.infer<typeof XProfileAnalysisSchema>;
 
+
+
+// Social Media & Website Finder Schemas
+
+// Schema for social media finder input
+export const SocialMediaQuerySchema = z.object({
+  name: z.string().min(1, "Doctor name is required"),
+  specialty: z.string().optional().describe("Medical specialty to help verify identity"),
+  institution: z.string().optional().describe("Institution affiliation to help verify identity"),
+  x_username: z.string().optional().describe("X/Twitter username if known"),
+  location_hint: z.string().optional().describe("Location hint to help verify identity"),
+});
+
+// Schema for individual social media/website result
+export const SocialMediaResultSchema = z.object({
+  platform: z.enum(["linkedin", "personal_website", "faculty_page", "research_profile", "practice_website", "other"]).describe("Type of platform or website"),
+  url: z.string().describe("URL of the profile or website"),
+  title: z.string().describe("Title or name found on the profile/website"),
+  description: z.string().describe("Brief description or bio from the profile/website"),
+  verification_score: z.number().min(0).max(1).describe("Confidence that this belongs to the correct person"),
+  verification_factors: z.array(z.string()).describe("Factors that support this being the correct person"),
+});
+
+// Schema for social media finder output
+export const SocialMediaFinderSchema = z.object({
+  doctor_name: z.string().describe("Name of the doctor searched"),
+  specialty: z.string().describe("Medical specialty if provided"),
+  results: z.array(SocialMediaResultSchema).describe("List of found social media profiles and websites"),
+  total_found: z.number().describe("Total number of profiles/websites found"),
+  confidence_score: z.number().min(0).max(1).describe("Overall confidence in the results"),
+  search_queries_used: z.array(z.string()).describe("Search queries that were used"),
+  last_updated: z.string().describe("Timestamp when search was performed"),
+});
+
+export type SocialMediaQuery = z.infer<typeof SocialMediaQuerySchema>;
+export type SocialMediaResult = z.infer<typeof SocialMediaResultSchema>;
+export type SocialMediaFinder = z.infer<typeof SocialMediaFinderSchema>;
+

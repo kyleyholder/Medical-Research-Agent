@@ -23,6 +23,11 @@ import {
   XProfileClassification,
   XProfileClassificationSchema,
   XProfileAnalysis,
+  SocialMediaQuery,
+  SocialMediaResult,
+  SocialMediaFinder,
+  SocialMediaResultSchema,
+  SocialMediaFinderSchema,
 } from './medical-schemas';
 import {
   medicalExtractionPrompt,
@@ -1313,5 +1318,159 @@ function extractSpecialtyFromText(text: string): string {
   return "General Medicine";
 }
 
-export { researchDoctor, researchInstitution, lookupNPI, analyzeXProfile, searchNPIProgressive, formatNPIResult };
+// Social Media & Website Finder Functions
+
+// Helper function to validate and score social media results
+function validateSocialMediaResult(result: any, doctorName: string, specialty?: string, institution?: string): { score: number, factors: string[] } {
+  let score = 0;
+  const factors: string[] = [];
+  
+  const resultText = `${result.title} ${result.description}`.toLowerCase();
+  const nameWords = doctorName.toLowerCase().split(' ');
+  
+  // Name matching (most important factor)
+  const nameMatches = nameWords.filter(word => word.length > 2 && resultText.includes(word));
+  if (nameMatches.length >= 2) {
+    score += 0.4;
+    factors.push(`Name match: ${nameMatches.join(', ')}`);
+  } else if (nameMatches.length === 1) {
+    score += 0.2;
+    factors.push(`Partial name match: ${nameMatches[0]}`);
+  }
+  
+  // Medical credentials
+  const medicalCredentials = ['md', 'do', 'phd', 'dr.', 'doctor', 'physician'];
+  const hasCredentials = medicalCredentials.some(cred => resultText.includes(cred));
+  if (hasCredentials) {
+    score += 0.2;
+    factors.push('Medical credentials found');
+  }
+  
+  // Specialty matching
+  if (specialty && resultText.includes(specialty.toLowerCase())) {
+    score += 0.2;
+    factors.push(`Specialty match: ${specialty}`);
+  }
+  
+  // Institution matching
+  if (institution && resultText.includes(institution.toLowerCase())) {
+    score += 0.15;
+    factors.push(`Institution match: ${institution}`);
+  }
+  
+  // Medical keywords
+  const medicalKeywords = ['hospital', 'clinic', 'medical', 'health', 'university', 'professor', 'research'];
+  const medicalMatches = medicalKeywords.filter(keyword => resultText.includes(keyword));
+  if (medicalMatches.length > 0) {
+    score += 0.05 * medicalMatches.length;
+    factors.push(`Medical context: ${medicalMatches.join(', ')}`);
+  }
+  
+  return { score: Math.min(score, 1.0), factors };
+}
+
+// Helper function to determine platform type from URL
+function determinePlatformType(url: string, title: string, description: string): "linkedin" | "personal_website" | "faculty_page" | "research_profile" | "practice_website" | "other" {
+  const urlLower = url.toLowerCase();
+  const contentLower = `${title} ${description}`.toLowerCase();
+  
+  if (urlLower.includes('linkedin.com')) return 'linkedin';
+  if (urlLower.includes('researchgate.net') || urlLower.includes('scholar.google') || urlLower.includes('orcid.org')) return 'research_profile';
+  if (contentLower.includes('faculty') || contentLower.includes('professor') || urlLower.includes('edu')) return 'faculty_page';
+  if (contentLower.includes('practice') || contentLower.includes('clinic') || contentLower.includes('medical group')) return 'practice_website';
+  if (urlLower.includes('www.') && !urlLower.includes('linkedin') && !urlLower.includes('facebook') && !urlLower.includes('twitter')) return 'personal_website';
+  
+  return 'other';
+}
+
+// Main social media finder function
+async function findDoctorSocialMedia(query: SocialMediaQuery): Promise<SocialMediaFinder> {
+  log(`Starting social media search for: ${query.name}`);
+  
+  const searchQueries = [
+    // LinkedIn specific searches
+    `"${query.name}" site:linkedin.com ${query.specialty || ''} doctor physician`,
+    `"${query.name}" linkedin ${query.specialty || ''} MD DO`,
+    
+    // Faculty/institutional searches
+    `"${query.name}" ${query.specialty || ''} faculty university ${query.institution || ''}`,
+    `"${query.name}" ${query.specialty || ''} professor ${query.institution || ''}`,
+    
+    // Personal website searches
+    `"${query.name}" ${query.specialty || ''} doctor website`,
+    `"${query.name}" MD ${query.specialty || ''} personal website`,
+    
+    // Research profile searches
+    `"${query.name}" ${query.specialty || ''} researchgate scholar`,
+    `"${query.name}" ${query.specialty || ''} orcid research`,
+    
+    // Practice website searches
+    `"${query.name}" ${query.specialty || ''} practice clinic`,
+    `"${query.name}" doctor ${query.specialty || ''} medical group`,
+    
+    // General professional searches
+    `"${query.name}" ${query.specialty || ''} physician bio`,
+    `"${query.name}" MD ${query.specialty || ''} profile`
+  ];
+  
+  const results: SocialMediaResult[] = [];
+  const seenUrls = new Set<string>();
+  
+  for (const searchQuery of searchQueries) {
+    try {
+      const searchResults = await googleSearch(searchQuery.trim(), 5);
+      
+      for (const result of searchResults) {
+        // Skip if we've already seen this URL
+        if (seenUrls.has(result.link)) continue;
+        seenUrls.add(result.link);
+        
+        // Validate and score the result
+        const validation = validateSocialMediaResult(result, query.name, query.specialty, query.institution);
+        
+        // Only include results with reasonable confidence
+        if (validation.score >= 0.3) {
+          const platformType = determinePlatformType(result.link, result.title, result.snippet);
+          
+          results.push({
+            platform: platformType,
+            url: result.link,
+            title: result.title,
+            description: result.snippet,
+            verification_score: validation.score,
+            verification_factors: validation.factors,
+          });
+        }
+      }
+      
+      // Small delay between searches
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+    } catch (error) {
+      log(`Error in social media search query "${searchQuery}":`, error);
+      continue;
+    }
+  }
+  
+  // Sort results by verification score (highest first)
+  results.sort((a, b) => b.verification_score - a.verification_score);
+  
+  // Calculate overall confidence score
+  const avgScore = results.length > 0 ? results.reduce((sum, r) => sum + r.verification_score, 0) / results.length : 0;
+  const confidenceScore = Math.min(avgScore * (results.length > 0 ? 1 : 0), 1.0);
+  
+  log(`✅ Social media search complete for ${query.name}: ${results.length} results found`);
+  
+  return {
+    doctor_name: query.name,
+    specialty: query.specialty || "Not specified",
+    results: results,
+    total_found: results.length,
+    confidence_score: confidenceScore,
+    search_queries_used: searchQueries,
+    last_updated: new Date().toISOString(),
+  };
+}
+
+export { researchDoctor, researchInstitution, lookupNPI, analyzeXProfile, searchNPIProgressive, formatNPIResult, findDoctorSocialMedia };
 
