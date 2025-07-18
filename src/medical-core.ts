@@ -999,13 +999,14 @@ async function scrapeXProfileAlternative(username: string): Promise<string | nul
   try {
     // Multiple search strategies to find profile information
     const searchQueries = [
-      `"${username}" "CLL" "lymphoma" "oncologist" "FDA"`, // Specific to Maryam_Yazdy
       `"${username}" site:x.com OR site:twitter.com bio profile`,
-      `"@${username}" doctor physician MD DO`,
+      `"@${username}" doctor physician MD DO PhD`,
       `"${username}" medical doctor physician`,
-      `"${username}" "Senior Physician" "FDA"`,
-      `"Maryam S. Yazdy" MD doctor physician`,
-      `"${username}" oncology hematology cancer`
+      `"${username}" "PhD" "medical" "health"`,
+      `"${username}" hospital clinic university medical`,
+      `"${username}" "Program Coordinator" "medical physics"`,
+      `"${username}" radiation oncology health`,
+      `"${username}" researcher scientist medical`
     ];
     
     let allProfileInfo = "";
@@ -1040,22 +1041,30 @@ async function scrapeXProfileAlternative(username: string): Promise<string | nul
     try {
       const additionalQueries = [
         `"${username}" linkedin profile doctor physician`,
-        `"Maryam Yazdy" FDA oncologist`,
-        `"Maryam S Yazdy" MD Georgetown`,
-        `"${username}" "Center for Drug Evaluation"`,
-        `"${username}" CDER FDA physician`
+        `"${username}" faculty directory university`,
+        `"${username}" "medical physics" "radiation"`,
+        `"${username}" "health program" coordinator`,
+        `"${username}" podcast medical health`,
+        `"${username}" purdue medical health science`,
+        `"${username}" researcher medical physics`
       ];
       
       for (const additionalQuery of additionalQueries) {
         const additionalResults = await googleSearch(additionalQuery, 3);
         
         for (const result of additionalResults) {
-          if (result.snippet.toLowerCase().includes('doctor') || 
-              result.snippet.toLowerCase().includes('physician') ||
-              result.snippet.toLowerCase().includes('md') ||
-              result.snippet.toLowerCase().includes('medical') ||
-              result.snippet.toLowerCase().includes('oncologist') ||
-              result.snippet.toLowerCase().includes('fda')) {
+          // Look for medical indicators in the content
+          const medicalKeywords = ['doctor', 'physician', 'md', 'do', 'phd', 'medical', 'health', 
+                                 'hospital', 'clinic', 'university', 'research', 'coordinator',
+                                 'radiation', 'oncology', 'physics', 'program', 'professor',
+                                 'scientist', 'researcher', 'faculty', 'director'];
+          
+          const hasmedicalContent = medicalKeywords.some(keyword => 
+            result.snippet.toLowerCase().includes(keyword) ||
+            result.title.toLowerCase().includes(keyword)
+          );
+          
+          if (hasmedicalContent) {
             allProfileInfo += `Additional Source: ${result.link}\n`;
             allProfileInfo += `Title: ${result.title}\n`;
             allProfileInfo += `Content: ${result.snippet}\n\n`;
@@ -1148,14 +1157,21 @@ Profile Content: ${trimPrompt(profileData.content, 3000)}
 
 Classification Guidelines:
 
-DOCTOR indicators:
-- Dr., MD, DO, PhD, DDS, DVM titles
-- Medical specialties (cardiology, neurosurgery, pediatrics, etc.)
-- Academic medical titles (Professor, Assistant Professor, Resident)
+DOCTOR indicators (classify as "doctor" if ANY of these are present):
+- Dr., MD, DO, PhD, DDS, DVM, PharmD titles
+- Medical specialties (cardiology, neurosurgery, pediatrics, oncology, radiology, medical physics, etc.)
+- Academic medical titles (Professor, Assistant Professor, Resident, Fellow, Coordinator)
 - Hospital/clinic affiliations in bio
 - Medical practice descriptions
 - Board certifications
 - Medical school affiliations
+- Health-related research positions
+- Medical physics, radiation therapy, health program roles
+- FDA, NIH, CDC, or other health agency affiliations
+- Podcast hosts discussing medical topics
+- Medical researchers or scientists
+- Health program coordinators or directors
+- University medical/health department affiliations
 
 INSTITUTION indicators:
 - Hospital, Clinic, Medical Center, Health System in name
@@ -1172,6 +1188,14 @@ NEITHER indicators:
 - Business unrelated to healthcare
 - Student accounts (unless medical student)
 
+IMPORTANT CLASSIFICATION RULES:
+- PhD in medical physics, health sciences, or related medical fields = DOCTOR
+- Program Coordinator for health/medical programs = DOCTOR
+- Researchers in medical/health fields = DOCTOR
+- Faculty at medical schools or health science centers = DOCTOR
+- Anyone with medical credentials or working in medical/health fields = DOCTOR
+- Be more liberal in classifying as "doctor" - when in doubt about medical relevance, classify as "doctor"
+
 Provide:
 1. Classification: "doctor", "institution", or "neither"
 2. Confidence score (0.0 to 1.0)
@@ -1180,9 +1204,7 @@ Provide:
 5. Extracted bio/description (provide empty string "" if not found)
 6. List of medical indicators found (provide empty array [] if none)
 
-IMPORTANT: You MUST provide all fields. Use empty string "" for extracted_name and extracted_bio if not available, and empty array [] for medical_indicators if none found.
-
-Be conservative - if unsure, classify as "neither" with lower confidence.`;
+IMPORTANT: You MUST provide all fields. Use empty string "" for extracted_name and extracted_bio if not available, and empty array [] for medical_indicators if none found.`;
 
   try {
     const result = await generateObject({
