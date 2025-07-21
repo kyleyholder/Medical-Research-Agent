@@ -1434,55 +1434,92 @@ function extractSpecialtyFromText(text: string): string {
 
 // Social Media & Website Finder Functions
 
-// Helper function to validate and score social media results
-function validateSocialMediaResult(result: any, doctorName: string, specialty?: string, institution?: string): { score: number, factors: string[] } {
+// Helper function to validate an// Enhanced verification function with stricter matching
+function verifyPersonMatch(result: any, name: string, specialty?: string, institution?: string, xUsername?: string): { score: number, factors: string[] } {
+  const resultText = `${result.title} ${result.snippet}`.toLowerCase();
+  const nameParts = name.toLowerCase().split(' ');
   let score = 0;
   const factors: string[] = [];
   
-  const resultText = `${result.title} ${result.description}`.toLowerCase();
-  const nameWords = doctorName.toLowerCase().split(' ');
+  // Enhanced name matching - require ALL name parts for high confidence
+  const nameMatches = nameParts.filter(part => part.length > 2 && resultText.includes(part));
+  if (nameMatches.length === nameParts.length) {
+    score += 0.4; // Higher weight for complete name match
+    factors.push(`Complete name match: ${nameMatches.join(', ')}`);
+  } else if (nameMatches.length >= Math.ceil(nameParts.length * 0.7)) {
+    score += 0.2; // Reduced score for partial match
+    factors.push(`Partial name match: ${nameMatches.join(', ')}`);
+  } else {
+    // If less than 70% of name parts match, this is likely wrong person
+    return { score: 0, factors: ['Insufficient name match - likely different person'] };
+  }
   
-  // Name matching (most important factor)
-  const nameMatches = nameWords.filter(word => word.length > 2 && resultText.includes(word));
-  if (nameMatches.length >= 2) {
-    score += 0.4;
-    factors.push(`Name match: ${nameMatches.join(', ')}`);
-  } else if (nameMatches.length === 1) {
-    score += 0.2;
-    factors.push(`Partial name match: ${nameMatches[0]}`);
+  // Institution matching - CRITICAL for disambiguation
+  if (institution) {
+    const institutionWords = institution.toLowerCase().split(' ');
+    const institutionMatches = institutionWords.filter(word => 
+      word.length > 2 && resultText.includes(word)
+    );
+    
+    if (institutionMatches.length >= Math.ceil(institutionWords.length * 0.7)) {
+      score += 0.25; // High weight for institution match
+      factors.push(`Strong institution match: ${institution}`);
+    } else if (institutionMatches.length > 0) {
+      score += 0.1; // Partial institution match
+      factors.push(`Partial institution match: ${institutionMatches.join(', ')}`);
+    } else {
+      // No institution match is a red flag
+      score -= 0.2;
+      factors.push('Institution mismatch - possible different person');
+    }
+  }
+  
+  // X username cross-reference
+  if (xUsername) {
+    const usernameInContent = resultText.includes(xUsername.toLowerCase()) || 
+                             resultText.includes(`@${xUsername.toLowerCase()}`);
+    if (usernameInContent) {
+      score += 0.2;
+      factors.push(`X username match: @${xUsername}`);
+    }
   }
   
   // Medical credentials
   const medicalCredentials = ['md', 'do', 'phd', 'dr.', 'doctor', 'physician'];
   const hasCredentials = medicalCredentials.some(cred => resultText.includes(cred));
   if (hasCredentials) {
-    score += 0.2;
+    score += 0.15;
     factors.push('Medical credentials found');
   }
   
-  // Specialty matching
-  if (specialty && resultText.includes(specialty.toLowerCase())) {
-    score += 0.2;
-    factors.push(`Specialty match: ${specialty}`);
+  // Specialty matching - important for medical professionals
+  if (specialty) {
+    const specialtyWords = specialty.toLowerCase().split(' ');
+    const specialtyMatches = specialtyWords.filter(word => 
+      word.length > 3 && resultText.includes(word)
+    );
+    
+    if (specialtyMatches.length > 0) {
+      score += 0.15;
+      factors.push(`Specialty match: ${specialtyMatches.join(', ')}`);
+    }
   }
   
-  // Institution matching
-  if (institution && resultText.includes(institution.toLowerCase())) {
-    score += 0.15;
-    factors.push(`Institution match: ${institution}`);
-  }
-  
-  // Medical keywords
+  // Medical context (lower weight)
   const medicalKeywords = ['hospital', 'clinic', 'medical', 'health', 'university', 'professor', 'research'];
   const medicalMatches = medicalKeywords.filter(keyword => resultText.includes(keyword));
   if (medicalMatches.length > 0) {
-    score += 0.05 * medicalMatches.length;
+    score += 0.05;
     factors.push(`Medical context: ${medicalMatches.join(', ')}`);
+  }
+  
+  // Apply minimum threshold - require at least 30% confidence
+  if (score < 0.3) {
+    return { score: 0, factors: ['Low confidence - likely different person'] };
   }
   
   return { score: Math.min(score, 1.0), factors };
 }
-
 // Helper function to determine platform type from URL
 function determinePlatformType(url: string, title: string, description: string): "linkedin" | "personal_website" | "faculty_page" | "research_profile" | "practice_website" | "other" {
   const urlLower = url.toLowerCase();
@@ -1501,14 +1538,31 @@ function determinePlatformType(url: string, title: string, description: string):
 async function findDoctorSocialMedia(query: SocialMediaQuery): Promise<SocialMediaFinder> {
   log(`Starting social media search for: ${query.name}`);
   
+  // Enhanced search queries with institution-specific targeting
   const searchQueries = [
-    // LinkedIn specific searches
-    `"${query.name}" site:linkedin.com ${query.specialty || ''} doctor physician`,
-    `"${query.name}" linkedin ${query.specialty || ''} MD DO`,
+    // Institution-specific searches (highest priority when institution provided)
+    ...(query.institution ? [
+      `"${query.name}" site:${query.institution.toLowerCase().replace(/\s+/g, '')}.org`,
+      `"${query.name}" site:${query.institution.toLowerCase().replace(/\s+/g, '')}.edu`,
+      `"${query.name}" "${query.institution}" faculty directory`,
+      `"${query.name}" "${query.institution}" staff profile`,
+      `"${query.name}" "${query.institution}" ${query.specialty || 'doctor'}`,
+    ] : []),
     
-    // Faculty/institutional searches
-    `"${query.name}" ${query.specialty || ''} faculty university ${query.institution || ''}`,
-    `"${query.name}" ${query.specialty || ''} professor ${query.institution || ''}`,
+    // X username cross-reference searches (when provided)
+    ...(query.x_username ? [
+      `"${query.name}" "@${query.x_username}" linkedin`,
+      `"${query.name}" "${query.x_username}" profile`,
+      `"@${query.x_username}" "${query.name}" bio`,
+    ] : []),
+    
+    // LinkedIn searches with institution context
+    `"${query.name}" ${query.institution || ''} linkedin`,
+    `"${query.name}" ${query.specialty || ''} linkedin profile`,
+    
+    // Faculty page searches with institution
+    `"${query.name}" ${query.institution || ''} faculty`,
+    `"${query.name}" ${query.institution || ''} professor directory`,
     
     // Personal website searches
     `"${query.name}" ${query.specialty || ''} doctor website`,
@@ -1522,7 +1576,7 @@ async function findDoctorSocialMedia(query: SocialMediaQuery): Promise<SocialMed
     `"${query.name}" ${query.specialty || ''} practice clinic`,
     `"${query.name}" doctor ${query.specialty || ''} medical group`,
     
-    // General professional searches
+    // General professional searches (lower priority)
     `"${query.name}" ${query.specialty || ''} physician bio`,
     `"${query.name}" MD ${query.specialty || ''} profile`
   ];
@@ -1539,11 +1593,11 @@ async function findDoctorSocialMedia(query: SocialMediaQuery): Promise<SocialMed
         if (seenUrls.has(result.link)) continue;
         seenUrls.add(result.link);
         
-        // Validate and score the result
-        const validation = validateSocialMediaResult(result, query.name, query.specialty, query.institution);
+        // Validate and score the result with enhanced verification
+        const validation = verifyPersonMatch(result, query.name, query.specialty, query.institution, query.x_username);
         
-        // Only include results with reasonable confidence
-        if (validation.score >= 0.3) {
+        // Apply stricter threshold - only include high-confidence results
+        if (validation.score >= 0.5) {
           const platformType = determinePlatformType(result.link, result.title, result.snippet);
           
           results.push({
@@ -1569,17 +1623,44 @@ async function findDoctorSocialMedia(query: SocialMediaQuery): Promise<SocialMed
   // Sort results by verification score (highest first)
   results.sort((a, b) => b.verification_score - a.verification_score);
   
-  // Calculate overall confidence score
-  const avgScore = results.length > 0 ? results.reduce((sum, r) => sum + r.verification_score, 0) / results.length : 0;
-  const confidenceScore = Math.min(avgScore * (results.length > 0 ? 1 : 0), 1.0);
+  // Apply additional filtering for institution-specific results
+  let filteredResults = results;
   
-  log(`✅ Social media search complete for ${query.name}: ${results.length} results found`);
+  if (query.institution && results.length > 5) {
+    // If we have institution info and many results, prioritize institution matches
+    const institutionResults = results.filter(r => 
+      r.verification_factors.some(factor => 
+        factor.toLowerCase().includes('institution match') || 
+        factor.toLowerCase().includes('strong institution')
+      )
+    );
+    
+    const nonInstitutionResults = results.filter(r => 
+      !r.verification_factors.some(factor => 
+        factor.toLowerCase().includes('institution match') || 
+        factor.toLowerCase().includes('strong institution')
+      )
+    );
+    
+    // Keep top institution matches + top few non-institution matches
+    filteredResults = [
+      ...institutionResults.slice(0, 8),
+      ...nonInstitutionResults.slice(0, 2)
+    ].sort((a, b) => b.verification_score - a.verification_score);
+  }
+  
+  // Final confidence calculation based on filtered results
+  const avgScore = filteredResults.length > 0 ? 
+    filteredResults.reduce((sum, r) => sum + r.verification_score, 0) / filteredResults.length : 0;
+  const confidenceScore = Math.min(avgScore * (filteredResults.length > 0 ? 1 : 0), 1.0);
+  
+  log(`✅ Social media search complete for ${query.name}: ${filteredResults.length} results found (${results.length} before filtering)`);
   
   return {
     doctor_name: query.name,
     specialty: query.specialty || "Not specified",
-    results: results,
-    total_found: results.length,
+    results: filteredResults,
+    total_found: filteredResults.length,
     confidence_score: confidenceScore,
     search_queries_used: searchQueries,
     last_updated: new Date().toISOString(),
