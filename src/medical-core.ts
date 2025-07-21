@@ -1615,19 +1615,24 @@ async function findDoctorSocialMedia(query: SocialMediaQuery): Promise<SocialMed
     log(`X username provided (@${query.x_username}) - using targeted search mode`);
     
     const targetedSearchQueries = [
-      // LinkedIn search with X username cross-reference
-      `"${query.name}" "@${query.x_username}" linkedin`,
-      `"${query.name}" "${query.x_username}" linkedin profile`,
+      // Simple, practical LinkedIn searches (most likely to find results)
+      `"${query.name}" linkedin`,
+      `"${query.name}" linkedin profile`,
       
-      // Institution faculty/profile page (if institution provided)
+      // Institution-specific searches (if institution provided)
       ...(query.institution ? [
-        `"${query.name}" "${query.institution}" faculty profile`,
-        `"${query.name}" "${query.institution}" staff directory`,
-        `"${query.name}" site:${query.institution.toLowerCase().replace(/\s+/g, '')}.edu`,
-        `"${query.name}" site:${query.institution.toLowerCase().replace(/\s+/g, '')}.org`,
+        `"${query.name}" "${query.institution}"`,
+        `"${query.name}" "${query.institution}" faculty`,
+        `"${query.name}" "${query.institution}" profile`,
+        `"${query.name}" site:${query.institution.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')}.org`,
+        `"${query.name}" site:${query.institution.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')}.edu`,
       ] : []),
       
-      // Specialty-specific institutional searches
+      // Cross-reference searches (secondary priority)
+      `"${query.name}" "@${query.x_username}" linkedin`,
+      `"${query.name}" "${query.x_username}" profile`,
+      
+      // Specialty-specific searches (if both provided)
       ...(query.specialty && query.institution ? [
         `"${query.name}" "${query.institution}" ${query.specialty}`,
       ] : []),
@@ -1695,11 +1700,13 @@ async function performTargetedSearch(query: SocialMediaQuery, searchQueries: str
         // Apply very strict verification for targeted searches
         const validation = verifyPersonMatch(result, query.name, query.specialty, query.institution, query.x_username);
         
-        // Higher threshold for targeted searches - require X username match or strong institution match
+        // More balanced threshold for targeted searches - allow good matches without requiring X username
         const hasXUsernameMatch = validation.factors.some(factor => factor.toLowerCase().includes('x username match'));
         const hasStrongInstitutionMatch = validation.factors.some(factor => factor.toLowerCase().includes('strong institution'));
+        const hasGoodNameMatch = validation.factors.some(factor => factor.toLowerCase().includes('complete name match'));
         
-        if (validation.score >= 0.6 && (hasXUsernameMatch || hasStrongInstitutionMatch)) {
+        // Lower threshold (50%) and more flexible matching for targeted searches
+        if (validation.score >= 0.5 && (hasXUsernameMatch || hasStrongInstitutionMatch || hasGoodNameMatch)) {
           const platformType = determinePlatformType(result.link, result.title, result.snippet);
           
           // Only include LinkedIn and faculty pages in targeted mode
