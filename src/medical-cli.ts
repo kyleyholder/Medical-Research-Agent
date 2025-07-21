@@ -365,6 +365,10 @@ async function handleXProfileAnalysis() {
   console.log(`🏷️ ${analysisResult.classification.toUpperCase()}`);
   console.log(`📊 ${(analysisResult.confidence_score * 100).toFixed(0)}% confidence`);
   
+  if (analysisResult.twitter_id) {
+    console.log(`🆔 Twitter ID: ${analysisResult.twitter_id}`);
+  }
+  
   if (analysisResult.profile_data?.display_name) {
     console.log(`👤 ${analysisResult.profile_data.display_name}`);
   }

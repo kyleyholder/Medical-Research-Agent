@@ -181,6 +181,9 @@ export const XProfileAnalysisSchema = z.object({
     verified: z.boolean().optional(),
   }).optional().describe("Raw profile data extracted from X"),
   
+  // Twitter/X ID lookup
+  twitter_id: z.string().optional().describe("Numeric Twitter/X ID for the account"),
+  
   last_updated: z.string().describe("Timestamp when analysis was performed"),
 });
 

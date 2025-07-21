@@ -48,6 +48,53 @@ function quietLog(message: string) {
   console.log(message);
 }
 
+// Function to lookup Twitter/X ID from username using twiteridfinder.com
+async function lookupTwitterId(username: string): Promise<string | null> {
+  try {
+    // Remove @ symbol if present
+    const cleanUsername = username.replace('@', '');
+    
+    log(`🔍 Looking up Twitter ID for @${cleanUsername}...`);
+    
+    // Use web search to find the Twitter ID via twiteridfinder.com
+    const searchQuery = `site:twiteridfinder.com "${cleanUsername}"`;
+    const searchResults = await googleSearch(searchQuery, 3);
+    
+    for (const result of searchResults) {
+      // Look for Twitter ID in the search result
+      const idMatch = result.snippet.match(/ID[:\s]*(\d+)/i) || 
+                     result.title.match(/ID[:\s]*(\d+)/i) ||
+                     result.snippet.match(/(\d{10,})/); // Twitter IDs are typically 10+ digits
+      
+      if (idMatch && idMatch[1]) {
+        const twitterId = idMatch[1];
+        log(`✅ Found Twitter ID: ${twitterId} for @${cleanUsername}`);
+        return twitterId;
+      }
+    }
+    
+    // Fallback: try direct search for the username and ID
+    const fallbackQuery = `"@${cleanUsername}" twitter id number`;
+    const fallbackResults = await googleSearch(fallbackQuery, 3);
+    
+    for (const result of fallbackResults) {
+      const idMatch = result.snippet.match(/(\d{10,})/);
+      if (idMatch && idMatch[1]) {
+        const twitterId = idMatch[1];
+        log(`✅ Found Twitter ID (fallback): ${twitterId} for @${cleanUsername}`);
+        return twitterId;
+      }
+    }
+    
+    log(`❌ Could not find Twitter ID for @${cleanUsername}`);
+    return null;
+    
+  } catch (error) {
+    log(`❌ Error looking up Twitter ID for @${username}:`, error);
+    return null;
+  }
+}
+
 // Helper function to trim prompts to fit context
 function trimPrompt(text: string, maxLength: number = 4000): string {
   if (text.length <= maxLength) return text;
@@ -1361,7 +1408,11 @@ async function analyzeXProfile(xQuery: XProfileQuery): Promise<XProfileAnalysis>
   const profileUrl = constructXProfileURL(username);
   
   try {
-    // Step 1: Scrape the X profile with enhanced methods
+    // Step 1: Lookup Twitter ID
+    log(`🔍 Looking up Twitter ID for @${username}...`);
+    const twitterId = await lookupTwitterId(username);
+    
+    // Step 2: Scrape the X profile with enhanced methods
     const profileData = await scrapeXProfile(username);
     
     if (!profileData || !profileData.content || profileData.content.length < 50) {
@@ -1377,6 +1428,7 @@ async function analyzeXProfile(xQuery: XProfileQuery): Promise<XProfileAnalysis>
           classification: "neither",
           confidence_score: 0,
           reasoning: "Could not access or scrape X profile content. Profile may be private, suspended, or protected.",
+          twitter_id: twitterId || undefined,
           last_updated: new Date().toISOString(),
         };
       }
@@ -1385,10 +1437,10 @@ async function analyzeXProfile(xQuery: XProfileQuery): Promise<XProfileAnalysis>
       profileData.content = enhancedContent;
     }
     
-    // Step 2: Classify the profile with enhanced content
+    // Step 3: Classify the profile with enhanced content
     const classification = await classifyXProfile(profileData);
     
-    // Step 3: Return classification results
+    // Step 4: Return classification results with Twitter ID
     const analysis: XProfileAnalysis = {
       username: username,
       profile_url: profileUrl,
@@ -1399,6 +1451,7 @@ async function analyzeXProfile(xQuery: XProfileQuery): Promise<XProfileAnalysis>
         display_name: classification.extracted_name,
         bio: classification.extracted_bio,
       },
+      twitter_id: twitterId || undefined,
       last_updated: new Date().toISOString(),
     };
     
