@@ -1651,6 +1651,23 @@ async function performTargetedSearch(query: SocialMediaQuery, searchQueries: str
           
           // Only include LinkedIn and faculty pages in targeted mode
           if (platformType === 'linkedin' || platformType === 'faculty_page') {
+            // Filter out LinkedIn directory pages - only include individual profiles
+            if (platformType === 'linkedin') {
+              // Skip LinkedIn directory pages (/pub/dir/, /directory/, etc.)
+              if (result.link.includes('/pub/dir/') || 
+                  result.link.includes('/directory/') ||
+                  result.link.includes('profiles | LinkedIn') ||
+                  result.title.includes('profiles | LinkedIn') ||
+                  result.title.includes('"') && result.title.includes('profiles')) {
+                continue; // Skip this directory result
+              }
+              
+              // Only include individual LinkedIn profiles (/in/)
+              if (!result.link.includes('/in/')) {
+                continue; // Skip non-individual LinkedIn pages
+              }
+            }
+            
             results.push({
               platform: platformType,
               url: result.link,
