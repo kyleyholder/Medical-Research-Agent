@@ -56,11 +56,17 @@ async function lookupTwitterId(username: string): Promise<string | null> {
     
     log(`🔍 Looking up Twitter ID for @${cleanUsername}...`);
     
-    // Simple, reliable search strategy
+    // Simple, single search with timeout protection
     const searchQuery = `"${cleanUsername}" site:twiteridfinder.com OR "${cleanUsername}" twitter id`;
     
     try {
-      const searchResults = await googleSearch(searchQuery, 2);
+      // Add timeout protection
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Twitter ID lookup timeout')), 10000)
+      );
+      
+      const searchPromise = googleSearch(searchQuery, 2);
+      const searchResults = await Promise.race([searchPromise, timeoutPromise]);
       
       for (const result of searchResults) {
         const textToSearch = `${result.title} ${result.snippet}`;
@@ -69,7 +75,6 @@ async function lookupTwitterId(username: string): Promise<string | null> {
         const idPatterns = [
           /ID[:\s]*(\d{10,20})/i,
           /(\d{15,20})/,
-          /@\w+[:\s]*(\d{10,20})/i,
         ];
         
         for (const pattern of idPatterns) {
@@ -1613,27 +1618,12 @@ async function findDoctorSocialMedia(query: SocialMediaQuery): Promise<SocialMed
     log(`X username provided (@${query.x_username}) - using targeted search mode`);
     
     const targetedSearchQueries = [
-      // Simple, practical LinkedIn searches (most likely to find results)
+      // Simple, practical searches that are most likely to work
       `"${query.name}" linkedin`,
-      `"${query.name}" linkedin profile`,
-      
-      // Institution-specific searches (if institution provided)
-      ...(query.institution ? [
-        `"${query.name}" "${query.institution}"`,
-        `"${query.name}" "${query.institution}" faculty`,
-        `"${query.name}" "${query.institution}" profile`,
-        `"${query.name}" site:${query.institution.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')}.org`,
-        `"${query.name}" site:${query.institution.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')}.edu`,
-      ] : []),
-      
-      // Cross-reference searches (secondary priority)
-      `"${query.name}" "@${query.x_username}" linkedin`,
-      `"${query.name}" "${query.x_username}" profile`,
-      
-      // Specialty-specific searches (if both provided)
-      ...(query.specialty && query.institution ? [
-        `"${query.name}" "${query.institution}" ${query.specialty}`,
-      ] : []),
+      `"${query.name}" "${query.institution || 'hospital'}" faculty`,
+      `"${query.name}" site:jefferson.edu`,
+      `"${query.name}" site:jeffersonhealth.org`,
+      `"${query.name}" "${query.specialty || 'doctor'}" profile`,
     ];
     
     return await performTargetedSearch(query, targetedSearchQueries);
