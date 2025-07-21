@@ -307,17 +307,39 @@ async function handleNPILookup() {
      selectedResult = searchResult.results[parseInt(selection) - 1];
   }
 
-  // Step 5: Display the selected result directly (don't make a new API call)
+  // Step 5: Display the selected result directly using correct NPI API field structure
   console.log("\n✅ NPI Found!");
   console.log("==============");
-  console.log(`🔢 NPI: ${selectedResult.npi_number}`);
-  console.log(`👨‍⚕️ ${selectedResult.name}`);
-  console.log(`🏥 ${selectedResult.specialty}`);
-  console.log(`📍 ${selectedResult.practice_address}`);
-  if (selectedResult.phone) {
-    console.log(`📞 ${selectedResult.phone}`);
+  
+  // Extract data from NPI API structure
+  const basicInfo = selectedResult.basic || {};
+  const addresses = selectedResult.addresses || [];
+  const taxonomies = selectedResult.taxonomies || [];
+  
+  const practiceAddress = addresses.find(addr => addr.address_purpose === "LOCATION") || addresses[0];
+  const primaryTaxonomy = taxonomies.find(tax => tax.primary === true) || taxonomies[0];
+  
+  const credential = basicInfo.credential || "";
+  const fullName = `${basicInfo.first_name || ""} ${basicInfo.last_name || ""}`.trim();
+  const nameWithCredential = credential ? `${fullName}, ${credential}` : fullName;
+  
+  const addressLine = practiceAddress ? 
+    `${practiceAddress.address_1 || ""} ${practiceAddress.address_2 || ""}`.trim() : "";
+  const addressCity = practiceAddress?.city || "";
+  const addressState = practiceAddress?.state || "";
+  const postal = practiceAddress?.postal_code || "";
+  const fullAddress = `${addressLine}, ${addressCity}, ${addressState}, ${postal}`.replace(/^,\s*|,\s*$/, '');
+  
+  console.log(`🔢 NPI: ${selectedResult.number || "Not available"}`);
+  console.log(`👨‍⚕️ ${nameWithCredential || "Not available"}`);
+  console.log(`🏥 ${primaryTaxonomy?.desc || "Not specified"}`);
+  console.log(`📍 ${fullAddress || "Not available"}`);
+  
+  if (practiceAddress?.telephone_number) {
+    console.log(`📞 ${practiceAddress.telephone_number}`);
   }
-  console.log(`✅ Status: ${selectedResult.status}`);
+  
+  console.log(`✅ Status: ${basicInfo.status || "Not available"}`);
   console.log(`📊 Confidence: 100%`); // Direct selection from NPI registry
 }
 
