@@ -304,31 +304,21 @@ async function handleNPILookup() {
       return;
     }
 
-    selectedResult = searchResult.results[parseInt(selection) - 1];
+     selectedResult = searchResult.results[parseInt(selection) - 1];
   }
 
-  // Step 5: Convert selected result to NPIInfo format and display
-  const npiQuery: NPIQuery = {
-    first_name: firstName.trim(),
-    last_name: lastName.trim(),
-    state: state?.trim(),
-    city: city?.trim(),
-    specialty: specialty?.trim(),
-  };
-
-  const npiResult = await lookupNPI(npiQuery);
-
+  // Step 5: Display the selected result directly (don't make a new API call)
   console.log("\n✅ NPI Found!");
   console.log("==============");
-  console.log(`🔢 NPI: ${npiResult.npi_number}`);
-  console.log(`👨‍⚕️ ${npiResult.name}`);
-  console.log(`🏥 ${npiResult.specialty}`);
-  console.log(`📍 ${npiResult.practice_address}`);
-  if (npiResult.phone) {
-    console.log(`📞 ${npiResult.phone}`);
+  console.log(`🔢 NPI: ${selectedResult.npi_number}`);
+  console.log(`👨‍⚕️ ${selectedResult.name}`);
+  console.log(`🏥 ${selectedResult.specialty}`);
+  console.log(`📍 ${selectedResult.practice_address}`);
+  if (selectedResult.phone) {
+    console.log(`📞 ${selectedResult.phone}`);
   }
-  console.log(`✅ Status: ${npiResult.status}`);
-  console.log(`📊 Confidence: ${(npiResult.confidence_score * 100).toFixed(0)}%`);
+  console.log(`✅ Status: ${selectedResult.status}`);
+  console.log(`📊 Confidence: 100%`); // Direct selection from NPI registry
 }
 
 // Handle X profile analysis with user choice for in-depth research
