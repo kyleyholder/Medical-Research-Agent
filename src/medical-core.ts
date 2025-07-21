@@ -1004,14 +1004,27 @@ async function scrapeXProfileAlternative(username: string): Promise<string | nul
   try {
     // Multiple search strategies to find profile information
     const searchQueries = [
+      // Direct X profile searches
       `"${username}" site:x.com OR site:twitter.com bio profile`,
+      `"@${username}" site:x.com OR site:twitter.com`,
+      
+      // Medical professional searches
       `"@${username}" doctor physician MD DO PhD`,
       `"${username}" medical doctor physician`,
-      `"${username}" "PhD" "medical" "health"`,
+      `"${username}" "MD" "DO" "PhD" medical`,
+      
+      // Specific medical roles and specialties
       `"${username}" hospital clinic university medical`,
       `"${username}" "Program Coordinator" "medical physics"`,
       `"${username}" radiation oncology health`,
-      `"${username}" researcher scientist medical`
+      `"${username}" researcher scientist medical`,
+      `"${username}" nurse practitioner NP`,
+      `"${username}" physician assistant PA`,
+      
+      // Bio and profile searches
+      `"${username}" bio profile medical health`,
+      `"${username}" twitter bio doctor`,
+      `"${username}" x.com profile medical`
     ];
     
     let allProfileInfo = "";
@@ -1022,12 +1035,27 @@ async function scrapeXProfileAlternative(username: string): Promise<string | nul
         
         for (const result of searchResults) {
           // Check if this is likely the profile or mentions the user
-          if (result.link.includes(`x.com/${username}`) || 
-              result.link.includes(`twitter.com/${username}`) ||
-              result.title.toLowerCase().includes(username.toLowerCase()) ||
-              result.snippet.toLowerCase().includes(`@${username.toLowerCase()}`)) {
-            
+          const isRelevant = result.link.includes(`x.com/${username}`) || 
+                           result.link.includes(`twitter.com/${username}`) ||
+                           result.title.toLowerCase().includes(username.toLowerCase()) ||
+                           result.snippet.toLowerCase().includes(`@${username.toLowerCase()}`) ||
+                           result.snippet.toLowerCase().includes(username.toLowerCase());
+          
+          if (isRelevant) {
             allProfileInfo += `Source: ${result.link}\n`;
+            allProfileInfo += `Title: ${result.title}\n`;
+            allProfileInfo += `Content: ${result.snippet}\n\n`;
+          }
+          
+          // Also capture any medical-related mentions even if not direct profile
+          const hasMedicalContent = ['doctor', 'physician', 'md', 'do', 'phd', 'medical', 'health', 
+                                   'hospital', 'clinic', 'nurse', 'practitioner', 'assistant'].some(keyword => 
+            result.snippet.toLowerCase().includes(keyword) && 
+            result.snippet.toLowerCase().includes(username.toLowerCase())
+          );
+          
+          if (hasMedicalContent && !isRelevant) {
+            allProfileInfo += `Medical Reference: ${result.link}\n`;
             allProfileInfo += `Title: ${result.title}\n`;
             allProfileInfo += `Content: ${result.snippet}\n\n`;
           }
@@ -1232,30 +1260,116 @@ IMPORTANT: You MUST provide all fields. Use empty string "" for extracted_name a
   }
 }
 
+// Enhanced X profile search as final fallback
+async function enhancedXProfileSearch(username: string): Promise<string | null> {
+  try {
+    log(`Trying enhanced search for ${username}...`);
+    
+    // More aggressive search queries specifically for medical professionals
+    const enhancedQueries = [
+      // Direct profile searches with variations
+      `"${username}" x.com profile bio`,
+      `"${username}" twitter.com profile bio`,
+      `"@${username}" profile bio`,
+      
+      // Medical professional specific searches
+      `"${username}" doctor physician medical`,
+      `"${username}" MD DO NP PA medical`,
+      `"${username}" nurse practitioner physician assistant`,
+      `"${username}" hospital clinic medical center`,
+      
+      // Bio and description searches
+      `"${username}" bio description medical health`,
+      `"${username}" works at hospital clinic`,
+      `"${username}" medical professional healthcare`,
+      
+      // Social media aggregator searches
+      `"${username}" social media profile medical`,
+      `"${username}" twitter bio medical doctor`,
+      `"${username}" healthcare professional profile`
+    ];
+    
+    let aggregatedContent = "";
+    
+    for (const query of enhancedQueries) {
+      try {
+        const searchResults = await googleSearch(query.trim(), 3);
+        
+        for (const result of searchResults) {
+          // Look for any mention of the username with medical context
+          const hasUsername = result.title.toLowerCase().includes(username.toLowerCase()) ||
+                             result.snippet.toLowerCase().includes(username.toLowerCase()) ||
+                             result.snippet.toLowerCase().includes(`@${username.toLowerCase()}`);
+          
+          const hasMedicalContext = ['doctor', 'physician', 'md', 'do', 'phd', 'medical', 'health', 
+                                   'hospital', 'clinic', 'nurse', 'practitioner', 'assistant',
+                                   'healthcare', 'medicine', 'treatment'].some(keyword => 
+            result.snippet.toLowerCase().includes(keyword)
+          );
+          
+          if (hasUsername && hasMedicalContext) {
+            aggregatedContent += `Enhanced Source: ${result.link}\n`;
+            aggregatedContent += `Title: ${result.title}\n`;
+            aggregatedContent += `Content: ${result.snippet}\n\n`;
+          }
+        }
+        
+        // Shorter delay for enhanced search
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+      } catch (error) {
+        log(`Error in enhanced search query "${query}":`, error);
+        continue;
+      }
+    }
+    
+    if (aggregatedContent.length > 100) {
+      log(`✅ Enhanced search found content for ${username}: ${aggregatedContent.length} characters`);
+      return `Enhanced Profile Information for @${username}:\n${aggregatedContent}`;
+    }
+    
+    return null;
+    
+  } catch (error) {
+    log(`Error in enhanced X profile search:`, error);
+    return null;
+  }
+}
+
 // Main X profile analysis function - classification only
 async function analyzeXProfile(xQuery: XProfileQuery): Promise<XProfileAnalysis> {
   const username = normalizeXUsername(xQuery.username);
   const profileUrl = constructXProfileURL(username);
   
   try {
-    // Step 1: Scrape the X profile
+    // Step 1: Scrape the X profile with enhanced methods
     const profileData = await scrapeXProfile(username);
     
-    if (!profileData) {
-      return {
-        username: username,
-        profile_url: profileUrl,
-        classification: "neither",
-        confidence_score: 0,
-        reasoning: "Could not access or scrape X profile",
-        last_updated: new Date().toISOString(),
-      };
+    if (!profileData || !profileData.content || profileData.content.length < 50) {
+      // Enhanced fallback: Try additional search methods
+      log(`Primary scraping failed for ${username}, trying enhanced search...`);
+      
+      const enhancedContent = await enhancedXProfileSearch(username);
+      
+      if (!enhancedContent) {
+        return {
+          username: username,
+          profile_url: profileUrl,
+          classification: "neither",
+          confidence_score: 0,
+          reasoning: "Could not access or scrape X profile content. Profile may be private, suspended, or protected.",
+          last_updated: new Date().toISOString(),
+        };
+      }
+      
+      // Use enhanced content for classification
+      profileData.content = enhancedContent;
     }
     
-    // Step 2: Classify the profile (no automatic research)
+    // Step 2: Classify the profile with enhanced content
     const classification = await classifyXProfile(profileData);
     
-    // Step 3: Return classification results only
+    // Step 3: Return classification results
     const analysis: XProfileAnalysis = {
       username: username,
       profile_url: profileUrl,
