@@ -1557,7 +1557,33 @@ function determinePlatformType(url: string, title: string, description: string):
 async function findDoctorSocialMedia(query: SocialMediaQuery): Promise<SocialMediaFinder> {
   log(`Starting social media search for: ${query.name}`);
   
-  // Enhanced search queries with institution-specific targeting
+  // TARGETED MODE: When X username is provided, use focused searches only
+  if (query.x_username) {
+    log(`X username provided (@${query.x_username}) - using targeted search mode`);
+    
+    const targetedSearchQueries = [
+      // LinkedIn search with X username cross-reference
+      `"${query.name}" "@${query.x_username}" linkedin`,
+      `"${query.name}" "${query.x_username}" linkedin profile`,
+      
+      // Institution faculty/profile page (if institution provided)
+      ...(query.institution ? [
+        `"${query.name}" "${query.institution}" faculty profile`,
+        `"${query.name}" "${query.institution}" staff directory`,
+        `"${query.name}" site:${query.institution.toLowerCase().replace(/\s+/g, '')}.edu`,
+        `"${query.name}" site:${query.institution.toLowerCase().replace(/\s+/g, '')}.org`,
+      ] : []),
+      
+      // Specialty-specific institutional searches
+      ...(query.specialty && query.institution ? [
+        `"${query.name}" "${query.institution}" ${query.specialty}`,
+      ] : []),
+    ];
+    
+    return await performTargetedSearch(query, targetedSearchQueries);
+  }
+  
+  // BROAD MODE: When no X username, use comprehensive searches
   const searchQueries = [
     // Institution-specific searches (highest priority when institution provided)
     ...(query.institution ? [
@@ -1566,13 +1592,6 @@ async function findDoctorSocialMedia(query: SocialMediaQuery): Promise<SocialMed
       `"${query.name}" "${query.institution}" faculty directory`,
       `"${query.name}" "${query.institution}" staff profile`,
       `"${query.name}" "${query.institution}" ${query.specialty || 'doctor'}`,
-    ] : []),
-    
-    // X username cross-reference searches (when provided)
-    ...(query.x_username ? [
-      `"${query.name}" "@${query.x_username}" linkedin`,
-      `"${query.name}" "${query.x_username}" profile`,
-      `"@${query.x_username}" "${query.name}" bio`,
     ] : []),
     
     // LinkedIn searches with institution context
@@ -1600,6 +1619,81 @@ async function findDoctorSocialMedia(query: SocialMediaQuery): Promise<SocialMed
     `"${query.name}" MD ${query.specialty || ''} profile`
   ];
   
+  return await performBroadSearch(query, searchQueries);
+}
+
+// Targeted search function for when X username is provided
+async function performTargetedSearch(query: SocialMediaQuery, searchQueries: string[]): Promise<SocialMediaFinder> {
+  const results: SocialMediaResult[] = [];
+  const seenUrls = new Set<string>();
+  
+  log(`Performing targeted search with ${searchQueries.length} focused queries`);
+  
+  for (const searchQuery of searchQueries) {
+    try {
+      // Use fewer results per query for more focused search
+      const searchResults = await googleSearch(searchQuery.trim(), 3);
+      
+      for (const result of searchResults) {
+        // Skip if we've already seen this URL
+        if (seenUrls.has(result.link)) continue;
+        seenUrls.add(result.link);
+        
+        // Apply very strict verification for targeted searches
+        const validation = verifyPersonMatch(result, query.name, query.specialty, query.institution, query.x_username);
+        
+        // Higher threshold for targeted searches - require X username match or strong institution match
+        const hasXUsernameMatch = validation.factors.some(factor => factor.toLowerCase().includes('x username match'));
+        const hasStrongInstitutionMatch = validation.factors.some(factor => factor.toLowerCase().includes('strong institution'));
+        
+        if (validation.score >= 0.6 && (hasXUsernameMatch || hasStrongInstitutionMatch)) {
+          const platformType = determinePlatformType(result.link, result.title, result.snippet);
+          
+          // Only include LinkedIn and faculty pages in targeted mode
+          if (platformType === 'linkedin' || platformType === 'faculty_page') {
+            results.push({
+              platform: platformType,
+              url: result.link,
+              title: result.title,
+              description: result.snippet,
+              verification_score: validation.score,
+              verification_factors: validation.factors,
+            });
+          }
+        }
+      }
+      
+      // Shorter delay for targeted searches
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+    } catch (error) {
+      log(`Error in targeted search query "${searchQuery}":`, error);
+      continue;
+    }
+  }
+  
+  // Sort by verification score
+  results.sort((a, b) => b.verification_score - a.verification_score);
+  
+  // Calculate confidence based on targeted results
+  const avgScore = results.length > 0 ? results.reduce((sum, r) => sum + r.verification_score, 0) / results.length : 0;
+  const confidenceScore = Math.min(avgScore, 1.0);
+  
+  log(`✅ Targeted search complete for ${query.name}: ${results.length} focused results found`);
+  
+  return {
+    doctor_name: query.name,
+    specialty: query.specialty || "Not specified",
+    results: results,
+    total_found: results.length,
+    confidence_score: confidenceScore,
+    search_queries_used: searchQueries,
+    last_updated: new Date().toISOString(),
+  };
+}
+
+// Broad search function for when no X username is provided
+async function performBroadSearch(query: SocialMediaQuery, searchQueries: string[]): Promise<SocialMediaFinder> {
   const results: SocialMediaResult[] = [];
   const seenUrls = new Set<string>();
   
