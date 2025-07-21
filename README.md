@@ -6,11 +6,12 @@ This project was developed by Kyley Holder using the deep-research framework and
 
 ## Features
 
-- **Multiple Search Options**: Choose from doctor profiles, institution research, NPI lookups, or X profile analysis
+- **Multiple Search Options**: Choose from doctor profiles, institution research, NPI lookups, X profile analysis, or social media & website finder
 - **Doctor Profile Research**: Comprehensive information about medical professionals including specialty, location, and workplace
 - **Institution Location Research**: Find detailed information about medical institutions including location, websites, and social media
 - **NPI Number Lookup**: Search the official NPPES registry for National Provider Identifier information
 - **X/Twitter Profile Analysis**: Automatically classify X profiles as doctor, institution, or neither, then extract relevant medical information
+- **Social Media & Website Finder**: Comprehensive search for LinkedIn profiles, personal websites, faculty pages, research profiles, and practice websites
 - **Structured JSON Output**: Consistent data format with confidence scoring
 - **Multiple Source Validation**: Cross-references information across authoritative medical sources
 - **Interactive CLI Interface**: User-friendly numbered menu system
@@ -54,7 +55,8 @@ The interactive menu provides the following options:
 2. **Find medical institution location** - Research medical institutions and their details
 3. **Find NPI number for US doctor** - Look up National Provider Identifier information
 4. **Analyze X/Twitter profile** - Classify and research X profiles for Medical Watch verification
-5. **Exit** - Close the application
+5. **Find doctor's social media & websites** - Comprehensive search for professional profiles and websites
+6. **Exit** - Close the application
 
 #### Option 1: Doctor Profile Research
 Follow the prompts to enter:
@@ -98,6 +100,34 @@ Enter an X username (with or without @) to:
 - **Verify Medical Watch accounts** for relevance
 
 This feature is particularly useful for Medical Watch verification workflows.
+
+#### Option 5: Social Media & Website Finder
+Enter doctor information to find professional profiles and websites:
+
+**Required Input**:
+- Doctor's full name
+
+**Optional Input** (improves accuracy):
+- Medical specialty
+- Institution/workplace
+- X/Twitter username (if known)
+
+**What it finds**:
+- **LinkedIn profiles** - Professional networking profiles
+- **Personal websites** - Doctor's own websites
+- **Faculty pages** - University/institution faculty directories
+- **Research profiles** - ResearchGate, Google Scholar, ORCID
+- **Practice websites** - Clinic/medical practice sites
+- **Other professional profiles** - Speaking, conference, bio pages
+
+**Features**:
+- **Smart verification** - Uses name, specialty, and institution matching
+- **Confidence scoring** - Each result includes verification confidence
+- **Platform categorization** - Results grouped by platform type
+- **Duplicate detection** - Avoids showing the same profile multiple times
+- **Comprehensive search** - Uses 12+ targeted search strategies
+
+This feature is ideal for Medical Watch verification and building comprehensive doctor profiles.
 
 #### API Server
 ```bash

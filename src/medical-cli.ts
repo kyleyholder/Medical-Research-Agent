@@ -278,14 +278,30 @@ async function handleNPILookup() {
     if (searchResult.results.length > 10) {
       console.log(`\n... and ${searchResult.results.length - 10} more results`);
     }
+    
+    // Add "None of these" option
+    const maxOption = Math.min(searchResult.results.length, 10);
+    console.log(`${maxOption + 1}. None of these - person not found or no NPI\n`);
 
     // Get user selection
     let selection = "";
-    while (!selection || isNaN(parseInt(selection)) || parseInt(selection) < 1 || parseInt(selection) > Math.min(searchResult.results.length, 10)) {
-      selection = await askQuestion(`\nEnter your choice (1-${Math.min(searchResult.results.length, 10)}): `);
-      if (!selection || isNaN(parseInt(selection)) || parseInt(selection) < 1 || parseInt(selection) > Math.min(searchResult.results.length, 10)) {
+    while (!selection || isNaN(parseInt(selection)) || parseInt(selection) < 1 || parseInt(selection) > maxOption + 1) {
+      selection = await askQuestion(`\nEnter your choice (1-${maxOption + 1}): `);
+      if (!selection || isNaN(parseInt(selection)) || parseInt(selection) < 1 || parseInt(selection) > maxOption + 1) {
         console.log("⚠️ Please enter a valid number from the list above.\n");
       }
+    }
+
+    // Check if user selected "None of these"
+    if (parseInt(selection) === maxOption + 1) {
+      console.log("\n❌ No matching provider found");
+      console.log("=================================");
+      console.log("The person you're looking for may:");
+      console.log("• Not have an NPI number (international doctors, retired, etc.)");
+      console.log("• Be listed under a different name or spelling");
+      console.log("• Not be in the NPPES registry");
+      console.log("• Try using Option 1 (Doctor Profile Research) for broader search\n");
+      return;
     }
 
     selectedResult = searchResult.results[parseInt(selection) - 1];
