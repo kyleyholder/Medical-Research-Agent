@@ -56,33 +56,57 @@ async function lookupTwitterId(username: string): Promise<string | null> {
     
     log(`🔍 Looking up Twitter ID for @${cleanUsername}...`);
     
-    // Use web search to find the Twitter ID via twiteridfinder.com
-    const searchQuery = `site:twiteridfinder.com "${cleanUsername}"`;
-    const searchResults = await googleSearch(searchQuery, 3);
+    // Strategy 1: Search twiteridfinder.com specifically
+    const twitterIdQueries = [
+      `site:twiteridfinder.com "${cleanUsername}"`,
+      `site:twiteridfinder.com ${cleanUsername}`,
+      `"${cleanUsername}" twiteridfinder.com`,
+      `"@${cleanUsername}" twitter id`,
+      `"${cleanUsername}" twitter user id`,
+    ];
     
-    for (const result of searchResults) {
-      // Look for Twitter ID in the search result
-      const idMatch = result.snippet.match(/ID[:\s]*(\d+)/i) || 
-                     result.title.match(/ID[:\s]*(\d+)/i) ||
-                     result.snippet.match(/(\d{10,})/); // Twitter IDs are typically 10+ digits
-      
-      if (idMatch && idMatch[1]) {
-        const twitterId = idMatch[1];
-        log(`✅ Found Twitter ID: ${twitterId} for @${cleanUsername}`);
-        return twitterId;
-      }
-    }
-    
-    // Fallback: try direct search for the username and ID
-    const fallbackQuery = `"@${cleanUsername}" twitter id number`;
-    const fallbackResults = await googleSearch(fallbackQuery, 3);
-    
-    for (const result of fallbackResults) {
-      const idMatch = result.snippet.match(/(\d{10,})/);
-      if (idMatch && idMatch[1]) {
-        const twitterId = idMatch[1];
-        log(`✅ Found Twitter ID (fallback): ${twitterId} for @${cleanUsername}`);
-        return twitterId;
+    for (const query of twitterIdQueries) {
+      try {
+        const searchResults = await googleSearch(query, 3);
+        
+        for (const result of searchResults) {
+          // Enhanced ID pattern matching
+          const patterns = [
+            /ID[:\s]*(\d{10,})/i,                    // "ID: 1234567890"
+            /User\s*ID[:\s]*(\d{10,})/i,             // "User ID: 1234567890"
+            /Twitter\s*ID[:\s]*(\d{10,})/i,          // "Twitter ID: 1234567890"
+            /(\d{15,20})/g,                          // Long numeric IDs (15-20 digits)
+            /@\w+\s*[:\-]\s*(\d{10,})/i,            // "@username: 1234567890"
+            /\b(\d{10,})\b/g,                        // Any 10+ digit number
+          ];
+          
+          const textToSearch = `${result.title} ${result.snippet}`;
+          
+          for (const pattern of patterns) {
+            const matches = textToSearch.match(pattern);
+            if (matches) {
+              // For global patterns, check all matches
+              const allMatches = pattern.global ? 
+                [...textToSearch.matchAll(pattern)] : [matches];
+              
+              for (const match of allMatches) {
+                const potentialId = match[1] || match[0];
+                // Twitter IDs are typically 10-20 digits
+                if (potentialId && /^\d{10,20}$/.test(potentialId)) {
+                  log(`✅ Found Twitter ID: ${potentialId} for @${cleanUsername}`);
+                  return potentialId;
+                }
+              }
+            }
+          }
+        }
+        
+        // Small delay between searches
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+      } catch (error) {
+        log(`Error in Twitter ID search query "${query}":`, error);
+        continue;
       }
     }
     
