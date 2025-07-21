@@ -1183,6 +1183,30 @@ function extractXProfileFromHTML(html: string): string | null {
 async function classifyXProfile(profileData: any): Promise<XProfileClassification> {
   const model = getModel();
   
+  // Pre-classification logic for obvious institutional accounts
+  const username = profileData.url?.split('/').pop()?.toLowerCase() || '';
+  const content = profileData.content?.toLowerCase() || '';
+  
+  // Check for obvious institutional indicators in username
+  const institutionalKeywords = ['lab', 'laboratory', 'center', 'centre', 'institute', 'hospital', 'clinic', 'dept', 'department', 'research', 'group', 'team'];
+  const hasInstitutionalUsername = institutionalKeywords.some(keyword => username.includes(keyword));
+  
+  // Check for organizational language patterns
+  const organizationalPatterns = ['we are', 'our team', 'our research', 'our mission', 'our lab', 'our group', 'our center'];
+  const hasOrganizationalLanguage = organizationalPatterns.some(pattern => content.includes(pattern));
+  
+  // If clear institutional indicators, classify as institution with high confidence
+  if (hasInstitutionalUsername && (hasOrganizationalLanguage || content.includes('research') || content.includes('laboratory'))) {
+    return {
+      classification: 'institution',
+      confidence_score: 0.95,
+      reasoning: `Username "${username}" contains institutional keywords (${institutionalKeywords.filter(k => username.includes(k)).join(', ')}) and content shows organizational language patterns. This appears to be a research lab, medical center, or institutional account rather than an individual doctor.`,
+      extracted_name: '',
+      extracted_bio: content.substring(0, 200),
+      medical_indicators: ['research', 'laboratory', 'medical', 'health'].filter(indicator => content.includes(indicator))
+    };
+  }
+  
   const classificationPrompt = `Analyze this X (Twitter) profile and classify it as either a "doctor", "institution", or "neither".
 
 Profile URL: ${profileData.url}
@@ -1190,44 +1214,39 @@ Profile Content: ${trimPrompt(profileData.content, 3000)}
 
 Classification Guidelines:
 
-DOCTOR indicators (classify as "doctor" if ANY of these are present):
-- Dr., MD, DO, PhD, DDS, DVM, PharmD titles
-- Medical specialties (cardiology, neurosurgery, pediatrics, oncology, radiology, medical physics, etc.)
-- Academic medical titles (Professor, Assistant Professor, Resident, Fellow, Coordinator)
-- Hospital/clinic affiliations in bio
-- Medical practice descriptions
-- Board certifications
-- Medical school affiliations
-- Health-related research positions
-- Medical physics, radiation therapy, health program roles
-- FDA, NIH, CDC, or other health agency affiliations
-- Podcast hosts discussing medical topics
-- Medical researchers or scientists
-- Health program coordinators or directors
-- University medical/health department affiliations
+CRITICAL: Check username and account type FIRST before content analysis.
 
-INSTITUTION indicators:
-- Hospital, Clinic, Medical Center, Health System in name
-- "treating patients", "clinical practice", "healthcare"
-- Multiple locations mentioned
-- Research institution language
-- Healthcare organization descriptions
-- Medical education institutions
+INSTITUTION indicators (classify as "institution" if ANY of these are present):
+- Username contains: Lab, Laboratory, Center, Institute, Hospital, Clinic, Dept, Department, Research, Group, Team
+- Account represents a research lab, medical center, hospital, clinic, or department
+- Bio describes organizational mission or services
+- Multiple researchers/staff mentioned in bio
+- "We are", "Our team", "Our research", "Our mission" language
+- Official institutional accounts (verified or clearly organizational)
+- Research group or laboratory descriptions
+
+DOCTOR indicators (classify as "doctor" only for INDIVIDUAL medical professionals):
+- Individual person's account (not representing an organization)
+- Dr., MD, DO, PhD, DDS, DVM, PharmD titles for a specific person
+- Medical specialties attributed to an individual
+- Academic medical titles for one person (Professor, Assistant Professor, Resident, Fellow, Coordinator)
+- Personal bio describing individual's work/practice
+- "I am", "My research", "My practice" language
+- Individual medical professional's personal account
 
 NEITHER indicators:
 - No medical credentials or affiliations
 - Non-medical profession clearly stated
 - Personal/lifestyle content only
 - Business unrelated to healthcare
-- Student accounts (unless medical student)
 
 IMPORTANT CLASSIFICATION RULES:
-- PhD in medical physics, health sciences, or related medical fields = DOCTOR
-- Program Coordinator for health/medical programs = DOCTOR
-- Researchers in medical/health fields = DOCTOR
-- Faculty at medical schools or health science centers = DOCTOR
-- Anyone with medical credentials or working in medical/health fields = DOCTOR
-- Be more liberal in classifying as "doctor" - when in doubt about medical relevance, classify as "doctor"
+1. USERNAME ANALYSIS IS CRITICAL: If username contains "Lab", "Laboratory", "Center", "Institute", "Research", "Group", "Team", "Dept", "Department" → likely INSTITUTION
+2. LANGUAGE ANALYSIS: "We/Our" = INSTITUTION, "I/My" = DOCTOR
+3. SCOPE ANALYSIS: Multiple people mentioned = INSTITUTION, Single person = DOCTOR
+4. When in doubt between doctor and institution, check if it's representing an organization vs. an individual
+5. Research labs and medical centers are INSTITUTIONS, not doctors
+6. Individual researchers working at institutions are DOCTORS (if medical), but lab accounts are INSTITUTIONS
 
 Provide:
 1. Classification: "doctor", "institution", or "neither"
