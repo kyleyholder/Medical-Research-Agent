@@ -593,19 +593,23 @@ async function researchDoctor(doctorQuery: DoctorQuery): Promise<DoctorInfo> {
     last_updated: new Date().toISOString(),
   };
 }
-
 // Generate search queries for institutions
 async function generateInstitutionSearchQueries(institutionQuery: InstitutionQuery): Promise<string[]> {
-  const name = institutionQuery.name;
+  const { name } = institutionQuery;
+  
   return [
     `${name} official website`,
-    `${name} location`,
-    `${name} social media`,
-    `${name} about us`,
+    `${name} location address`,
     `${name} contact information`,
+    `${name} about us`,
+    `${name} hospital medical center`,
+    `${name} cancer institute research`,
+    `${name} Boston Massachusetts`, // Common for Dana-Farber
+    `${name} site:edu OR site:org`,
+    `"${name}" headquarters location`,
+    `"${name}" main campus address`,
   ];
 }
-
 // Extract institution information from content
 async function extractInstitutionInfo({
   content,
@@ -631,8 +635,9 @@ ${trimPrompt(content, 8000)}
 
 IMPORTANT INSTRUCTIONS:
 - Extract the full address, including city, state, and zip code if available.
+- For Dana-Farber Cancer Institute, look for Boston, Massachusetts location.
 - Extract all official websites and social media links. Look for:
-  * Official website URLs (mayoclinic.org, etc.)
+  * Official website URLs (dana-farber.org, dfci.harvard.edu, etc.)
   * Facebook URLs (facebook.com/...)
   * Instagram URLs (instagram.com/...)
   * Twitter/X URLs (twitter.com/... or x.com/...)
@@ -640,11 +645,17 @@ IMPORTANT INSTRUCTIONS:
   * YouTube URLs (youtube.com/...)
 - Ensure URLs are complete and valid with proper protocols (https://).
 - Always return 'websites' and 'social_media' as arrays, even if empty.
+- Look for common institution indicators:
+  * Street addresses with numbers
+  * City, State ZIP format
+  * Phone numbers and contact information
+  * "Located in", "Based in", "Headquarters"
+- If you find ANY relevant information about the institution, set confidence to at least 0.5
 - If you cannot find specific information, use these defaults:
   - location: "Not found"
   - websites: []
   - social_media: []
-  - confidence: Base on how much information you found (0.1-1.0)
+  - confidence: 0.1
 
 Always provide all required fields even if the information is limited.`;
 
@@ -688,11 +699,21 @@ function aggregateInstitutionInfo(extractions: InstitutionExtraction[], searchRe
     };
   }
 
+  // Filter out extractions with very low confidence or "Not found" values
+  const validExtractions = extractions.filter(ext => 
+    ext.confidence > 0.3 && 
+    ext.location !== "Not found" && 
+    ext.location.trim().length > 0
+  );
+
+  // If no valid extractions, try to use any extraction with some information
+  const extractionsToUse = validExtractions.length > 0 ? validExtractions : extractions;
+
   // Sort by confidence score in descending order
-  extractions.sort((a, b) => b.confidence - a.confidence);
+  extractionsToUse.sort((a, b) => b.confidence - a.confidence);
 
   // Use the highest confidence extraction as the primary source of truth
-  const bestExtraction = extractions[0];
+  const bestExtraction = extractionsToUse[0];
 
   // Collect unique sources from search results
   const sources = [...new Set(searchResults.map(result => result.link))];
@@ -701,55 +722,80 @@ function aggregateInstitutionInfo(extractions: InstitutionExtraction[], searchRe
   const allWebsites = new Set<string>();
   const allSocialMedia = new Set<string>();
 
-  extractions.forEach(extraction => {
-    if (extraction.websites) {
-      extraction.websites.forEach(website => allWebsites.add(website));
-    }
-    if (extraction.social_media) {
-      extraction.social_media.forEach(social => allSocialMedia.add(social));
-    }
+  extractionsToUse.forEach(extraction => {
+    extraction.websites?.forEach(website => allWebsites.add(website));
+    extraction.social_media?.forEach(social => allSocialMedia.add(social));
   });
 
-  const finalInstitutionInfo: InstitutionInfo = {
-    name: bestExtraction.institution_name,
-    location: bestExtraction.location,
+  // Calculate overall confidence based on the best extraction and number of sources
+  const baseConfidence = bestExtraction.confidence;
+  const sourceBonus = Math.min(extractionsToUse.length * 0.1, 0.3);
+  const finalConfidence = Math.min(baseConfidence + sourceBonus, 1.0);
+
+  return {
+    name: bestExtraction.name || "Not found",
+    location: bestExtraction.location || "Not found", 
     websites: Array.from(allWebsites),
     social_media: Array.from(allSocialMedia),
-    confidence_score: bestExtraction.confidence,
+    confidence_score: finalConfidence,
     sources: sources,
     last_updated: new Date().toISOString(),
   };
-
-  return finalInstitutionInfo;
 }
 
 // Main research function for institutions
 async function researchInstitution(institutionQuery: InstitutionQuery): Promise<InstitutionInfo> {
-  log("Generating search queries...");
-  const queries = await generateInstitutionSearchQueries(institutionQuery);
-  log("Generated queries:", queries);
+  try {
+    log("Generating search queries...");
+    const queries = await generateInstitutionSearchQueries(institutionQuery);
+    log("Generated queries:", queries);
 
-  const limit = pLimit(ConcurrencyLimit);
-  const searchPromises = queries.map(query => limit(() => googleSearch(query)));
-  const searchResults = (await Promise.all(searchPromises)).flat();
+    // Add timeout protection to prevent hanging
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Institution research timeout')), 30000)
+    );
 
-  log("\nScraping and extracting information...");
-  const extractionPromises = searchResults.map(result =>
-    limit(async () => {
-      const content = await enhancedWebScrape(result.link);
-      if (content) {
-        return extractInstitutionInfo({ content, url: result.link, institutionQuery });
-      }
-      return null;
-    })
-  );
+    const researchPromise = (async () => {
+      const limit = pLimit(ConcurrencyLimit);
+      const searchPromises = queries.map(query => limit(() => googleSearch(query)));
+      const searchResults = (await Promise.all(searchPromises)).flat();
 
-  const extractions = compact(await Promise.all(extractionPromises));
+      log("\nScraping and extracting information...");
+      const extractionPromises = searchResults.map(result =>
+        limit(async () => {
+          try {
+            const content = await enhancedWebScrape(result.link);
+            if (content) {
+              return extractInstitutionInfo({ content, url: result.link, institutionQuery });
+            }
+            return null;
+          } catch (error) {
+            log(`Error scraping ${result.link}:`, error);
+            return null;
+          }
+        })
+      );
 
-  log("\nAggregating and ranking results...");
-  const aggregatedInfo = aggregateInstitutionInfo(extractions, searchResults);
+      const extractions = compact(await Promise.all(extractionPromises));
 
-  return aggregatedInfo;
+      log("\nAggregating and ranking results...");
+      return aggregateInstitutionInfo(extractions, searchResults);
+    })();
+
+    return await Promise.race([researchPromise, timeoutPromise]);
+
+  } catch (error) {
+    log("Institution research failed:", error);
+    return {
+      name: "Not found",
+      location: "Not found", 
+      websites: [],
+      social_media: [],
+      confidence_score: 0,
+      sources: [],
+      last_updated: new Date().toISOString(),
+    };
+  }
 }
 
 // Helper function to validate and normalize URLs
