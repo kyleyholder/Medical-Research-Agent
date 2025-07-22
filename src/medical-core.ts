@@ -556,9 +556,19 @@ async function researchDoctor(doctorQuery: DoctorQuery): Promise<DoctorInfo> {
   const queries = await generateMedicalSearchQueries(doctorQuery);
   log("Generated queries:", queries);
 
+  // Track all sources used during research
+  const sourcesUsed: string[] = [];
+
   const limit = pLimit(ConcurrencyLimit);
   const searchPromises = queries.map(query => limit(() => googleSearch(query)));
   const searchResults = (await Promise.all(searchPromises)).flat();
+
+  // Add search result URLs to sources
+  searchResults.forEach(result => {
+    if (result.link && !sourcesUsed.includes(result.link)) {
+      sourcesUsed.push(result.link);
+    }
+  });
 
   log("\nScraping and extracting information...");
   const extractionPromises = searchResults.map(result =>
@@ -576,7 +586,12 @@ async function researchDoctor(doctorQuery: DoctorQuery): Promise<DoctorInfo> {
   log("\nAggregating and ranking results...");
   const aggregatedInfo = aggregateDoctorInfo(extractions);
 
-  return aggregatedInfo;
+  // Add sources to the final result
+  return {
+    ...aggregatedInfo,
+    sources: sourcesUsed,
+    last_updated: new Date().toISOString(),
+  };
 }
 
 // Generate search queries for institutions

@@ -142,6 +142,14 @@ async function handleDoctorResearch() {
   }
   
   console.log(`📊 Confidence: ${(result.confidence_score * 100).toFixed(0)}%`);
+  
+  // Display sources used for transparency
+  if (result.sources && result.sources.length > 0) {
+    console.log(`\n📚 Sources Used:`);
+    result.sources.forEach((source, index) => {
+      console.log(`${index + 1}. ${source}`);
+    });
+  }
 }
 
 // Handle institution research
