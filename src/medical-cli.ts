@@ -167,11 +167,11 @@ async function handleInstitutionResearch() {
 
   console.log("\n🔍 Researching...");
   
-  // Set quiet mode
-  process.env.QUIET_MODE = "true";
+  // Temporarily disable quiet mode to see debug output
+  // process.env.QUIET_MODE = "true";
   const institutionQuery = { name: institutionName };
   const institutionResult = await researchInstitution(institutionQuery);
-  delete process.env.QUIET_MODE;
+  // delete process.env.QUIET_MODE;
 
   console.log("\n✅ Institution Found!");
   console.log("====================");

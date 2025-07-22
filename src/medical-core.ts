@@ -733,7 +733,7 @@ function aggregateInstitutionInfo(extractions: InstitutionExtraction[], searchRe
   const finalConfidence = Math.min(baseConfidence + sourceBonus, 1.0);
 
   return {
-    name: bestExtraction.name || "Not found",
+    name: bestExtraction.institution_name || "Not found",
     location: bestExtraction.location || "Not found", 
     websites: Array.from(allWebsites),
     social_media: Array.from(allSocialMedia),
@@ -746,46 +746,54 @@ function aggregateInstitutionInfo(extractions: InstitutionExtraction[], searchRe
 // Main research function for institutions
 async function researchInstitution(institutionQuery: InstitutionQuery): Promise<InstitutionInfo> {
   try {
-    log("Generating search queries...");
+    console.log("🔍 Starting institution research for:", institutionQuery.name);
+    
     const queries = await generateInstitutionSearchQueries(institutionQuery);
-    log("Generated queries:", queries);
+    console.log("📋 Generated", queries.length, "search queries");
 
-    // Add timeout protection to prevent hanging
+    // Reduce timeout to 15 seconds to prevent hanging
     const timeoutPromise = new Promise<never>((_, reject) => 
-      setTimeout(() => reject(new Error('Institution research timeout')), 30000)
+      setTimeout(() => reject(new Error('Institution research timeout')), 15000)
     );
 
     const researchPromise = (async () => {
+      console.log("🔍 Starting web searches...");
       const limit = pLimit(ConcurrencyLimit);
-      const searchPromises = queries.map(query => limit(() => googleSearch(query)));
+      const searchPromises = queries.slice(0, 5).map(query => limit(() => googleSearch(query))); // Limit to 5 queries
       const searchResults = (await Promise.all(searchPromises)).flat();
+      console.log("📊 Found", searchResults.length, "search results");
 
-      log("\nScraping and extracting information...");
-      const extractionPromises = searchResults.map(result =>
+      console.log("🌐 Starting content extraction...");
+      const extractionPromises = searchResults.slice(0, 10).map(result => // Limit to 10 results
         limit(async () => {
           try {
             const content = await enhancedWebScrape(result.link);
             if (content) {
+              console.log("✅ Extracted institution info from", result.link + ":", content.substring(0, 100) + "...");
               return extractInstitutionInfo({ content, url: result.link, institutionQuery });
             }
             return null;
           } catch (error) {
-            log(`Error scraping ${result.link}:`, error);
+            console.log("❌ Error scraping", result.link + ":", error.message);
             return null;
           }
         })
       );
 
       const extractions = compact(await Promise.all(extractionPromises));
+      console.log("📋 Completed", extractions.length, "extractions");
 
-      log("\nAggregating and ranking results...");
-      return aggregateInstitutionInfo(extractions, searchResults);
+      console.log("🔄 Aggregating results...");
+      const result = aggregateInstitutionInfo(extractions, searchResults);
+      console.log("✅ Final result:", result.name, "-", result.location, "- Confidence:", result.confidence_score);
+      
+      return result;
     })();
 
     return await Promise.race([researchPromise, timeoutPromise]);
 
   } catch (error) {
-    log("Institution research failed:", error);
+    console.log("❌ Institution research failed:", error.message);
     return {
       name: "Not found",
       location: "Not found", 
