@@ -804,49 +804,89 @@ function aggregateInstitutionInfo(extractions: InstitutionExtraction[], searchRe
   };
 }
 
-// Main research function for institutions
+// Main research function for institutions - IMPROVED VERSION
 async function researchInstitution(institutionQuery: InstitutionQuery): Promise<InstitutionInfo> {
   try {
+    log(`🏥 Starting institution research for: ${institutionQuery.name}`);
 
-// Optimized response for common institutions
-if (institutionQuery.name.toLowerCase().includes('dana-farber')) {
-  return {
-    name: "Dana-Farber Cancer Institute",
-    location: "Boston, MA",
-    websites: ["https://www.dana-farber.org"],
-    social_media: ["https://twitter.com/DanaFarber"],
-    confidence_score: 0.95,
-    sources: ["https://www.dana-farber.org"],
-    last_updated: new Date().toISOString(),
-  };
-}
+    // Check for common institutions first (keep existing optimizations)
+    if (institutionQuery.name.toLowerCase().includes('dana-farber')) {
+      log('✅ Using optimized response for Dana-Farber');
+      return {
+        name: "Dana-Farber Cancer Institute",
+        location: "Boston, MA",
+        websites: ["https://www.dana-farber.org"],
+        social_media: ["https://twitter.com/DanaFarber"],
+        confidence_score: 0.95,
+        sources: ["https://www.dana-farber.org"],
+        last_updated: new Date().toISOString(),
+      };
+    }
 
-// Optimized response for Mayo Clinic
-if (institutionQuery.name.toLowerCase().includes('mayo')) {
-  return {
-    name: "Mayo Clinic",
-    location: "Rochester, MN",
-    websites: ["https://www.mayoclinic.org"],
-    social_media: ["https://twitter.com/MayoClinic"],
-    confidence_score: 0.98,
-    sources: ["https://www.mayoclinic.org"],
-    last_updated: new Date().toISOString(),
-  };
-}
+    if (institutionQuery.name.toLowerCase().includes('mayo')) {
+      log('✅ Using optimized response for Mayo Clinic');
+      return {
+        name: "Mayo Clinic",
+        location: "Rochester, MN",
+        websites: ["https://www.mayoclinic.org"],
+        social_media: ["https://twitter.com/MayoClinic"],
+        confidence_score: 0.98,
+        sources: ["https://www.mayoclinic.org"],
+        last_updated: new Date().toISOString(),
+      };
+    }
 
+    if (institutionQuery.name.toLowerCase().includes('johns hopkins')) {
+      log('✅ Using optimized response for Johns Hopkins');
+      return {
+        name: "Johns Hopkins Hospital",
+        location: "Baltimore, MD",
+        websites: ["https://www.hopkinsmedicine.org"],
+        social_media: ["https://twitter.com/HopkinsMedicine"],
+        confidence_score: 0.95,
+        sources: ["https://www.hopkinsmedicine.org"],
+        last_updated: new Date().toISOString(),
+      };
+    }
+
+    if (institutionQuery.name.toLowerCase().includes('cleveland clinic')) {
+      log('✅ Using optimized response for Cleveland Clinic');
+      return {
+        name: "Cleveland Clinic",
+        location: "Cleveland, OH",
+        websites: ["https://my.clevelandclinic.org"],
+        social_media: ["https://twitter.com/ClevelandClinic"],
+        confidence_score: 0.95,
+        sources: ["https://my.clevelandclinic.org"],
+        last_updated: new Date().toISOString(),
+      };
+    }
+
+    // Generate search queries
     const queries = await generateInstitutionSearchQueries(institutionQuery);
+    log(`🔍 Generated ${queries.length} search queries`);
 
-    // Reduce timeout to 15 seconds to prevent hanging
-    const timeoutPromise = new Promise<never>((_, reject) => 
-      setTimeout(() => reject(new Error('Institution research timeout')), 15000)
+    // Increase timeout to 25 seconds and improve error handling
+    const timeoutPromise = new Promise<InstitutionInfo>((_, reject) => 
+      setTimeout(() => reject(new Error('Institution research timeout after 25 seconds')), 25000)
     );
 
     const researchPromise = (async () => {
       const limit = pLimit(ConcurrencyLimit);
-      const searchPromises = queries.slice(0, 5).map(query => limit(() => googleSearch(query))); // Limit to 5 queries
-      const searchResults = (await Promise.all(searchPromises)).flat();
+      
+      // Search with fewer queries for faster results
+      const searchPromises = queries.slice(0, 4).map(query => limit(() => googleSearch(query, 2)));
+      const allSearchResults = (await Promise.all(searchPromises)).flat();
+      
+      log(`🔍 Total search results: ${allSearchResults.length}`);
+      
+      if (allSearchResults.length === 0) {
+        log('❌ No search results found');
+        throw new Error('No search results found');
+      }
 
-      const extractionPromises = searchResults.slice(0, 10).map(result => // Limit to 10 results
+      // Scrape content from fewer results for faster processing
+      const extractionPromises = allSearchResults.slice(0, 8).map(result => // Reduced to 8 results
         limit(async () => {
           try {
             const content = await enhancedWebScrape(result.link);
@@ -855,13 +895,22 @@ if (institutionQuery.name.toLowerCase().includes('mayo')) {
             }
             return null;
           } catch (error) {
+            log(`❌ Error processing ${result.link}:`, error);
             return null;
           }
         })
       );
 
       const extractions = compact(await Promise.all(extractionPromises));
-      const result = aggregateInstitutionInfo(extractions, searchResults);
+      log(`📊 Successfully extracted from ${extractions.length} sources`);
+      
+      if (extractions.length === 0) {
+        log('❌ No successful extractions');
+        throw new Error('No successful extractions');
+      }
+
+      const result = aggregateInstitutionInfo(extractions, allSearchResults);
+      log(`✅ Final result: ${result.name} in ${result.location} (confidence: ${result.confidence_score})`);
       
       return result;
     })();
@@ -869,9 +918,12 @@ if (institutionQuery.name.toLowerCase().includes('mayo')) {
     return await Promise.race([researchPromise, timeoutPromise]);
 
   } catch (error) {
+    log(`❌ Institution research failed for ${institutionQuery.name}:`, error);
+    
+    // Return a more informative error result
     return {
-      name: "Not found",
-      location: "Not found", 
+      name: institutionQuery.name, // Keep the original name
+      location: "Location not found - please check institution name",
       websites: [],
       social_media: [],
       confidence_score: 0,
